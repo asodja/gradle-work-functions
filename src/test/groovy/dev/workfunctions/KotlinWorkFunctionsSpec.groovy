@@ -115,6 +115,62 @@ class KotlinWorkFunctionsSpec extends AbstractWorkFunctionsSpec {
         file("build/work/greet/greet").text == "Hello, world?"
     }
 
+    def "supports a data class with several outputs"() {
+        given:
+        file("build.gradle.kts") << '''
+            import dev.workfunctions.OutputName
+            import dev.workfunctions.WorkFunction
+
+            plugins {
+                id("dev.workfunctions")
+            }
+
+            abstract class Split : WorkFunction<Split.In, Split.Out> {
+                data class In(val text: String)
+
+                data class Out(@get:OutputName("first.txt") val first: RegularFile, val rest: Directory)
+
+                override fun run(input: In, output: Out) {
+                    val words = input.text.split(" ")
+                    output.first.asFile.writeText(words.first())
+                    words.drop(1).forEach { output.rest.file(it).asFile.writeText(it) }
+                }
+            }
+
+            abstract class ListFiles : WorkFunction<ListFiles.In, RegularFile> {
+                data class In(val files: Directory)
+
+                override fun run(input: In, output: RegularFile) {
+                    output.asFile.writeText(input.files.asFileTree.files.map { it.name }.sorted().joinToString(","))
+                }
+            }
+
+            val split = work.register("split", Split::class) {
+                bind(Split.In::text).to(providers.gradleProperty("text"))
+            }
+
+            work.register("listRest", ListFiles::class) {
+                bind(ListFiles.In::files).to(split.map { it.rest })
+            }
+        '''
+
+        when:
+        def result = succeeds("listRest", "-Ptext=one two three")
+
+        then:
+        workTasks(result) == [":split", ":listRest"]
+        file("build/work/split/first.txt").text == "one"
+        file("build/work/listRest/listRest").text == "three,two"
+
+        when: "only the first output changes"
+        result = succeeds("listRest", "-Ptext=zero two three")
+
+        then:
+        result.task(":split").outcome == SUCCESS
+        result.task(":listRest").outcome == UP_TO_DATE
+        file("build/work/split/first.txt").text == "zero"
+    }
+
     def "reruns work when the work function changes"() {
         given:
         file("build.gradle.kts") << GREETING_SCRIPT

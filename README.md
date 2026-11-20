@@ -24,7 +24,7 @@ public abstract class GenerateVersion implements WorkFunction<GenerateVersion.In
 - `In` is a record, an interface, or a Kotlin data class.
 - A component annotated with any `@Nullable`, or with a nullable Kotlin type, is optional.
 - An input that is not bound uses its default: a default method of an interface, or a default value of a Kotlin data class.
-- The output is a `Directory`, a `RegularFile`, or a record of those. Gradle assigns the location under `build/work/<name>`.
+- The output is a `Directory`, a `RegularFile`, or a record or Kotlin data class of those. Gradle assigns the location under `build/work/<name>`.
 - File inputs use relative path sensitivity. Use `@Classpath`, `@CompileClasspath` or `@PathSensitive` on a component to change it.
 
 ## Register and wire work
