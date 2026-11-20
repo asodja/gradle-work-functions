@@ -166,6 +166,41 @@ class JavaWorkFunctionsSpec extends AbstractWorkFunctionsSpec {
         file("build/work/report/report.txt").readLines() == ["Files", "1. a.txt", "2. b.txt", "end"]
     }
 
+    def "a Kotlin script binds the inputs of a Java record"() {
+        given:
+        buildSrc()
+        workFunction("Greet", '''
+            public abstract class Greet implements WorkFunction<Greet.In, RegularFile> {
+
+                public record In(String name, boolean loud) {}
+
+                @Override
+                public void run(In input, RegularFile output) throws Exception {
+                    String text = "Hello, " + input.name();
+                    Files.writeString(output.getAsFile().toPath(), input.loud() ? text.toUpperCase() : text);
+                }
+            }
+        ''')
+        file("build.gradle.kts") << '''
+            import example.Greet
+
+            plugins {
+                id("dev.workfunctions")
+            }
+
+            works.work("greet", Greet::class) {
+                bind(Greet.In::name).to(providers.gradleProperty("who"))
+                bind(Greet.In::loud).to(true)
+            }
+        '''
+
+        when:
+        succeeds("greet", "-Pwho=world")
+
+        then:
+        file("build/work/greet/greet").text == "HELLO, WORLD"
+    }
+
     def "javac rejects #problem"() {
         given:
         buildSrc()
@@ -373,12 +408,6 @@ class JavaWorkFunctionsSpec extends AbstractWorkFunctionsSpec {
                 implementation files(${pluginClasspath().collect { "'$it'" }.join(", ")})
             }
         """
-        file("buildSrc/src/main/resources/META-INF/gradle-plugins/example.properties") << "implementation-class=example.ExamplePlugin"
-        file("build.gradle") << """
-            plugins {
-                id 'example'
-            }
-        """
     }
 
     private void workFunction(String name, String source) {
@@ -406,6 +435,12 @@ class JavaWorkFunctionsSpec extends AbstractWorkFunctionsSpec {
      * The wiring can use {@code project}, {@code works}, {@code providers} and {@code layout}.
      */
     private void plugin(String wiring) {
+        file("buildSrc/src/main/resources/META-INF/gradle-plugins/example.properties") << "implementation-class=example.ExamplePlugin"
+        file("build.gradle") << """
+            plugins {
+                id 'example'
+            }
+        """
         file("buildSrc/src/main/java/example/ExamplePlugin.java") << """
             package example;
 

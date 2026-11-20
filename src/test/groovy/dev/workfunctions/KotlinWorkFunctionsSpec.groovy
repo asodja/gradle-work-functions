@@ -9,8 +9,6 @@ class KotlinWorkFunctionsSpec extends AbstractWorkFunctionsSpec {
 
     static final String GREETING_SCRIPT = '''
         import dev.workfunctions.WorkFunction
-        import dev.workfunctions.bind
-        import dev.workfunctions.work
 
         plugins {
             id("dev.workfunctions")
@@ -97,19 +95,32 @@ class KotlinWorkFunctionsSpec extends AbstractWorkFunctionsSpec {
 
     def "the Kotlin compiler rejects #problem"() {
         given:
-        file("build.gradle.kts") << GREETING_SCRIPT.replace('providers.gradleProperty("who")', source)
+        file("build.gradle.kts") << GREETING_SCRIPT.replace('bind(Greet.In::name).to(providers.gradleProperty("who"))', binding)
 
         when:
         def result = fails("greet")
 
         then:
         result.output.contains("Script compilation error")
-        result.output.contains("The value does not match the type of the input.")
+        result.output.contains(error)
 
         where:
-        problem                        | source
-        "a value of the wrong type"    | '42'
-        "a provider of the wrong type" | 'providers.provider { 42 }'
+        problem                              | binding                                               | error
+        "a value of the wrong type"          | 'bind(Greet.In::name).to(42)'                         | "The value does not match the type of the input."
+        "a provider of the wrong type"       | 'bind(Greet.In::name).to(providers.provider { 42 })'  | "The value does not match the type of the input."
+        "a lambda as selector"               | 'bind { it.name }.to("world")'                        | "Cannot infer type for type parameter"
+        "an input of another work function"  | 'bind(Shout.In::text).to(greeting)'                   | "Cannot infer type for type parameter"
+    }
+
+    def "rejects a reference that is not an input"() {
+        given:
+        file("build.gradle.kts") << GREETING_SCRIPT.replace('bind(Greet.In::name).to(providers.gradleProperty("who"))', 'bind(Greet.In::toString).to("world")')
+
+        when:
+        def result = fails("greet")
+
+        then:
+        result.output.contains("toString is not an input of")
     }
 
     @Override

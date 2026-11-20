@@ -44,19 +44,20 @@ works.lifecycle("check", checksums);
 - `bind(...).to(...)` binds a provider, a constant, a file, or a file collection.
 - Bind a provider to keep the value lazy. Nothing is read while binding.
 - Passing an output to an input adds the task dependency.
-- An input is selected with a method reference. A lambda is a compile error.
+- An input is selected with a method reference. A lambda is a compile error, in Java and in Kotlin.
 
 ## Kotlin
 
 ```kotlin
-import dev.workfunctions.*
-
 val greeting = works.work("greet", Greet::class) {
     bind(Greet.In::name).to(providers.gradleProperty("who"))
 }
 ```
 
-The `In` type must be a Kotlin type. Kotlin cannot reference the components of a Java record.
+- `bind` and `work` are members, so they need no import.
+- The reference can point to a Kotlin property or to a component of a Java record.
+- A lambda, a value of the wrong type and an input of another work function are compile errors.
+- Define a Kotlin `In` as an interface. A Kotlin `data class` is not a record, and `@JvmRecord` has no effect in a build script.
 
 ## What the plugin checks
 

@@ -27,18 +27,7 @@ final class DefaultInputs<I> implements Inputs<I>, InputsInternal {
 
     @Override
     public <T> InputTarget<T> bind(Selector<I, T> input) {
-        InputSchema.Component component = SelectorResolver.resolve(input, schema);
-        return new InputTarget<>() {
-            @Override
-            public void to(T value) {
-                bind(component, value);
-            }
-
-            @Override
-            public void to(Provider<? extends T> source) {
-                bind(component, source);
-            }
-        };
+        return new InputTarget<>(this, SelectorResolver.resolve(input, schema).accessor().getName());
     }
 
     @Override
