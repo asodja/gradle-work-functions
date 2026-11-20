@@ -48,6 +48,55 @@ work.lifecycle("check", checksums);
 - Passing an output to an input adds the task dependency.
 - An input is selected with a method reference. A lambda is a compile error, in Java and in Kotlin.
 
+## Several outputs
+
+Make the output type a record with one component per output:
+
+```java
+public abstract class Report implements WorkFunction<Report.In, Report.Out> {
+
+    public record In(FileCollection sources, String title) {}
+
+    public record Out(@OutputName("report.txt") RegularFile report, Directory copies) {}
+
+    @Override
+    public void run(In input, Out output) throws Exception {
+        List<String> lines = new ArrayList<>();
+        lines.add(input.title());
+        for (File source : input.sources()) {
+            lines.add(source.getName());
+            Files.copy(source.toPath(), output.copies().file(source.getName()).getAsFile().toPath());
+        }
+        Files.write(output.report().getAsFile().toPath(), lines);
+    }
+}
+```
+
+`register` returns one provider for all outputs. A consumer picks one with `map`:
+
+```java
+Provider<Report.Out> report = work.register("report", Report.class, inputs -> {
+    inputs.bind(Report.In::sources).to(project.files("a.txt", "b.txt"));
+    inputs.bind(Report.In::title).to("Sources");
+});
+
+work.register("listCopies", ListFiles.class, inputs ->
+    inputs.bind(ListFiles.In::files).to(report.map(Report.Out::copies)));
+```
+
+- Each output gets its own location: `build/work/report/report.txt` and `build/work/report/copies`.
+- The consumer depends on the whole work, but only tracks the output it picked. It stays up to date when another output changes.
+
+In Kotlin the output type can be a data class:
+
+```kotlin
+data class Out(@get:OutputName("report.txt") val report: RegularFile, val copies: Directory)
+
+work.register("listCopies", ListFiles::class) {
+    bind(ListFiles.In::files).to(report.map { it.copies })
+}
+```
+
 ## Kotlin
 
 ```kotlin
