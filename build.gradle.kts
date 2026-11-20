@@ -1,6 +1,7 @@
 plugins {
     `java-gradle-plugin`
     `kotlin-dsl`
+    groovy
 }
 
 group = "dev.workfunctions"
@@ -28,7 +29,7 @@ gradlePlugin {
 testing {
     suites {
         named<JvmTestSuite>("test") {
-            useJUnitJupiter()
+            useSpock("2.3-groovy-4.0")
         }
     }
 }

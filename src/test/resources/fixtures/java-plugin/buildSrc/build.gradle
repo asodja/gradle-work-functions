@@ -1,9 +1,0 @@
-plugins {
-    id 'java'
-}
-
-dependencies {
-    implementation gradleApi()
-    // Written by the test: the classpath of the plugin under test.
-    implementation files(file('plugin-classpath.txt').readLines())
-}

@@ -31,18 +31,18 @@ public abstract class GenerateVersion implements WorkFunction<GenerateVersion.In
 Works works = project.getExtensions().getByType(Works.class);
 
 Provider<Directory> versionInfo = works.work("generateVersion", GenerateVersion.class, inputs -> {
-    inputs.set(GenerateVersion.In::version, providers.gradleProperty("appVersion"));
+    inputs.bind(GenerateVersion.In::version).to(providers.gradleProperty("appVersion"));
     inputs.bind(GenerateVersion.In::template).to(layout.getProjectDirectory().file("version.tpl"));
 });
 
 Provider<RegularFile> checksums = works.work("checksumVersion", Checksum.class, inputs ->
-    inputs.set(Checksum.In::files, versionInfo));
+    inputs.bind(Checksum.In::files).to(versionInfo));
 
 works.lifecycle("check", checksums);
 ```
 
-- `set` binds a provider of exactly the input type.
-- `bind(...).to(...)` binds a constant, a file, a file collection, or a provider of a subtype.
+- `bind(...).to(...)` binds a provider, a constant, a file, or a file collection.
+- Bind a provider to keep the value lazy. Nothing is read while binding.
 - Passing an output to an input adds the task dependency.
 - An input is selected with a method reference. A lambda is a compile error.
 
@@ -52,7 +52,7 @@ works.lifecycle("check", checksums);
 import dev.workfunctions.*
 
 val greeting = works.work("greet", Greet::class) {
-    inputs[Greet.In::name] = providers.gradleProperty("who")
+    bind(Greet.In::name).to(providers.gradleProperty("who"))
 }
 ```
 
