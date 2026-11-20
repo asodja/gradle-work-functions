@@ -22,31 +22,7 @@ public abstract class GenerateVersion implements WorkFunction<GenerateVersion.In
 }
 ```
 
-The same in Kotlin:
-
-```kotlin
-abstract class GenerateVersion : WorkFunction<GenerateVersion.In, Directory> {
-
-    data class In(val version: String, val template: RegularFile, val header: String?)
-
-    override fun run(input: In, output: Directory) {
-        val text = input.template.asFile.readText()
-        output.file("version.properties").asFile.writeText(text.replace("@VERSION@", input.version))
-    }
-}
-```
-
-- Every component of `In` is an input. `RegularFile`, `Directory` and `FileCollection` are file inputs. Anything else is a value.
-- `In` is a record, an interface, or a Kotlin data class.
-- A component annotated with any `@Nullable`, or with a nullable Kotlin type, is optional.
-- An input that is not bound uses its default: a default method of an interface, or a default value of a Kotlin data class.
-- The output is a `Directory`, a `RegularFile`, or a record or Kotlin data class of those. Gradle assigns the location under `build/work/<name>`.
-- `@OutputName` sets the file name of an output. Put it on the output parameter of `run`, or on a component when there are several outputs.
-- File inputs use relative path sensitivity. Use `@Classpath`, `@CompileClasspath` or `@PathSensitive` on a component to change it.
-
-## Register and wire work
-
-The wiring below uses a second work function. It reads a directory and writes one file:
+A second work function reads a directory and writes one file:
 
 ```java
 public abstract class Checksum implements WorkFunction<Checksum.In, RegularFile> {
@@ -65,20 +41,15 @@ public abstract class Checksum implements WorkFunction<Checksum.In, RegularFile>
 }
 ```
 
-```kotlin
-abstract class Checksum : WorkFunction<Checksum.In, RegularFile> {
+- Every component of `In` is an input. `RegularFile`, `Directory` and `FileCollection` are file inputs. Anything else is a value.
+- `In` is a record, an interface, or a Kotlin data class.
+- A component annotated with any `@Nullable`, or with a nullable Kotlin type, is optional.
+- An input that is not bound uses its default: a default method of an interface, or a default value of a Kotlin data class.
+- The output is a `Directory`, a `RegularFile`, or a record or Kotlin data class of those. Gradle assigns the location under `build/work/<name>`.
+- `@OutputName` sets the file name of an output. Put it on the output parameter of `run`, or on a component when there are several outputs.
+- File inputs use relative path sensitivity. Use `@Classpath`, `@CompileClasspath` or `@PathSensitive` on a component to change it.
 
-    data class In(val files: Directory)
-
-    override fun run(input: In, @OutputName("checksums.txt") output: RegularFile) {
-        val lines = input.files.asFileTree.files.sorted().map { file ->
-            val hash = MessageDigest.getInstance("SHA-256").digest(file.readBytes())
-            hash.joinToString("") { "%02x".format(it) } + "  " + file.name
-        }
-        output.asFile.writeText(lines.joinToString("\n"))
-    }
-}
-```
+## Register and wire work
 
 Register each work and pass the output of one to the input of the other:
 
@@ -157,25 +128,9 @@ work.register("checksumCopies", Checksum.class, inputs -> {
 - Each output gets its own location: `build/work/report/report.txt` and `build/work/report/copies`.
 - The consumer depends on the whole work, but only tracks the output it picked. It stays up to date when another output changes.
 
-The same in Kotlin, with a data class as the output type:
+The same in a Kotlin build script:
 
 ```kotlin
-abstract class Report : WorkFunction<Report.In, Report.Out> {
-
-    data class In(val sources: FileCollection, val title: String)
-
-    data class Out(@OutputName("report.txt") val report: RegularFile, val copies: Directory)
-
-    override fun run(input: In, output: Out) {
-        val lines = mutableListOf(input.title)
-        input.sources.forEach { source ->
-            lines += source.name
-            source.copyTo(output.copies.file(source.name).asFile)
-        }
-        output.report.asFile.writeText(lines.joinToString("\n"))
-    }
-}
-
 val report = work.register("report", Report::class) {
     bind(Report.In::sources).to(files("a.txt", "b.txt"))
     bind(Report.In::title).to("Sources")
