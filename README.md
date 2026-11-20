@@ -45,6 +45,44 @@ abstract class GenerateVersion : WorkFunction<GenerateVersion.In, Directory> {
 
 ## Register and wire work
 
+The wiring below uses a second work function. It reads a directory and writes one file:
+
+```java
+@OutputName("checksums.txt")
+public abstract class Checksum implements WorkFunction<Checksum.In, RegularFile> {
+
+    public record In(Directory files) {}
+
+    @Override
+    public void run(In input, RegularFile output) throws Exception {
+        List<String> lines = new ArrayList<>();
+        for (File file : new TreeSet<>(input.files().getAsFileTree().getFiles())) {
+            byte[] hash = MessageDigest.getInstance("SHA-256").digest(Files.readAllBytes(file.toPath()));
+            lines.add(HexFormat.of().formatHex(hash) + "  " + file.getName());
+        }
+        Files.write(output.getAsFile().toPath(), lines);
+    }
+}
+```
+
+```kotlin
+@OutputName("checksums.txt")
+abstract class Checksum : WorkFunction<Checksum.In, RegularFile> {
+
+    data class In(val files: Directory)
+
+    override fun run(input: In, output: RegularFile) {
+        val lines = input.files.asFileTree.files.sorted().map { file ->
+            val hash = MessageDigest.getInstance("SHA-256").digest(file.readBytes())
+            hash.joinToString("") { "%02x".format(it) } + "  " + file.name
+        }
+        output.asFile.writeText(lines.joinToString("\n"))
+    }
+}
+```
+
+Register each work and pass the output of one to the input of the other:
+
 ```java
 WorkRegistry work = project.getExtensions().getByType(WorkRegistry.class);
 
@@ -112,8 +150,8 @@ Provider<Report.Out> report = work.register("report", Report.class, inputs -> {
     inputs.bind(Report.In::title).to("Sources");
 });
 
-work.register("listCopies", ListFiles.class, inputs -> {
-    inputs.bind(ListFiles.In::files).to(report.map(Report.Out::copies));
+work.register("checksumCopies", Checksum.class, inputs -> {
+    inputs.bind(Checksum.In::files).to(report.map(Report.Out::copies));
 });
 ```
 
@@ -144,8 +182,8 @@ val report = work.register("report", Report::class) {
     bind(Report.In::title).to("Sources")
 }
 
-work.register("listCopies", ListFiles::class) {
-    bind(ListFiles.In::files).to(report.map { it.copies })
+work.register("checksumCopies", Checksum::class) {
+    bind(Checksum.In::files).to(report.map { it.copies })
 }
 ```
 
