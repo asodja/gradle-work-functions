@@ -56,7 +56,7 @@ val greeting = work.register("greet", Greet::class) {
 }
 ```
 
-- `bind` and `work` are members, so they need no import.
+- `bind` and `register` are members, so they need no import.
 - The reference can point to a Kotlin property or to a component of a Java record.
 - A lambda, a value of the wrong type and an input of another work function are compile errors.
 - A Kotlin `In` can be an interface or a data class.
