@@ -79,6 +79,42 @@ class KotlinWorkFunctionsSpec extends AbstractWorkFunctionsSpec {
         file("build/work/shout/shout").text == "HELLO, DR. WORLD."
     }
 
+    def "supports a data class with a nullable input and a default value"() {
+        given:
+        file("build.gradle.kts") << '''
+            import dev.workfunctions.WorkFunction
+
+            plugins {
+                id("dev.workfunctions")
+            }
+
+            abstract class Greet : WorkFunction<Greet.In, RegularFile> {
+                data class In(val name: String, val title: String?, val punctuation: String = "!")
+
+                override fun run(input: In, output: RegularFile) {
+                    output.asFile.writeText("Hello, ${input.title ?: ""}${input.name}${input.punctuation}")
+                }
+            }
+
+            works.work("greet", Greet::class) {
+                bind(Greet.In::name).to(providers.gradleProperty("who"))
+                bind(Greet.In::punctuation).to(providers.gradleProperty("punctuation"))
+            }
+        '''
+
+        when:
+        succeeds("greet", "-Pwho=world")
+
+        then:
+        file("build/work/greet/greet").text == "Hello, world!"
+
+        when:
+        succeeds("greet", "-Pwho=world", "-Ppunctuation=?")
+
+        then:
+        file("build/work/greet/greet").text == "Hello, world?"
+    }
+
     def "reruns work when the work function changes"() {
         given:
         file("build.gradle.kts") << GREETING_SCRIPT

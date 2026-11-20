@@ -21,7 +21,9 @@ public abstract class GenerateVersion implements WorkFunction<GenerateVersion.In
 ```
 
 - Every component of `In` is an input. `RegularFile`, `Directory` and `FileCollection` are file inputs. Anything else is a value.
-- A component annotated with any `@Nullable` is optional. An interface `In` can give defaults with default methods.
+- `In` is a record, an interface, or a Kotlin data class.
+- A component annotated with any `@Nullable`, or with a nullable Kotlin type, is optional.
+- An input that is not bound uses its default: a default method of an interface, or a default value of a Kotlin data class.
 - The output is a `Directory`, a `RegularFile`, or a record of those. Gradle assigns the location under `build/work/<name>`.
 - File inputs use relative path sensitivity. Use `@Classpath`, `@CompileClasspath` or `@PathSensitive` on a component to change it.
 
@@ -57,7 +59,7 @@ val greeting = works.work("greet", Greet::class) {
 - `bind` and `work` are members, so they need no import.
 - The reference can point to a Kotlin property or to a component of a Java record.
 - A lambda, a value of the wrong type and an input of another work function are compile errors.
-- Define a Kotlin `In` as an interface. A Kotlin `data class` is not a record, and `@JvmRecord` has no effect in a build script.
+- A Kotlin `In` can be an interface or a data class.
 
 ## What the plugin checks
 

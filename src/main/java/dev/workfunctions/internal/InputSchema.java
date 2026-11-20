@@ -29,13 +29,9 @@ final class InputSchema {
 
     enum Kind { VALUE, FILE, DIRECTORY, FILES }
 
-    record Component(String name, Method accessor, Kind kind, boolean optional) {
+    record Component(String name, Method accessor, Kind kind, boolean optional, boolean hasDefault) {
         Class<?> type() {
             return accessor.getReturnType();
-        }
-
-        boolean hasDefault() {
-            return accessor.isDefault();
         }
 
         <A extends Annotation> A annotation(Class<A> annotationType) {
@@ -45,30 +41,38 @@ final class InputSchema {
 
     private final Class<?> type;
     private final List<Component> components;
+    private final boolean kotlinDataClass;
 
-    private InputSchema(Class<?> type, List<Component> components) {
+    private InputSchema(Class<?> type, List<Component> components, boolean kotlinDataClass) {
         this.type = type;
         this.components = components;
+        this.kotlinDataClass = kotlinDataClass;
     }
 
     static InputSchema of(Class<?> type) {
         List<Component> components = new ArrayList<>();
-        if (type.isRecord()) {
+        // Checked before records: a Kotlin record is also a data class, and only this path knows its default values.
+        List<KotlinTypes.Parameter> parameters = KotlinTypes.dataClassParameters(type);
+        if (parameters != null) {
+            for (KotlinTypes.Parameter parameter : parameters) {
+                components.add(component(type, parameter.getName(), parameter.getGetter(), parameter.getHasDefault()));
+            }
+        } else if (type.isRecord()) {
             for (RecordComponent component : type.getRecordComponents()) {
-                components.add(component(type, component.getName(), component.getAccessor()));
+                components.add(component(type, component.getName(), component.getAccessor(), false));
             }
         } else if (type.isInterface()) {
             Method[] methods = type.getMethods();
             Arrays.sort(methods, Comparator.comparing(Method::getName));
             for (Method method : methods) {
                 if (!Modifier.isStatic(method.getModifiers()) && method.getParameterCount() == 0) {
-                    components.add(component(type, inputName(method.getName()), method));
+                    components.add(component(type, inputName(method.getName()), method, method.isDefault()));
                 }
             }
         } else {
-            throw new InvalidUserDataException("Input type " + type.getName() + " must be a record or an interface.");
+            throw new InvalidUserDataException("Input type " + type.getName() + " must be a record, an interface or a Kotlin data class.");
         }
-        return new InputSchema(type, components);
+        return new InputSchema(type, components, parameters != null);
     }
 
     Class<?> type() {
@@ -89,6 +93,9 @@ final class InputSchema {
     }
 
     Object instantiate(Map<String, Object> values) throws ReflectiveOperationException {
+        if (kotlinDataClass) {
+            return KotlinTypes.construct(type, values);
+        }
         if (type.isRecord()) {
             Class<?>[] parameterTypes = components.stream().map(Component::type).toArray(Class<?>[]::new);
             Constructor<?> constructor = type.getDeclaredConstructor(parameterTypes);
@@ -112,7 +119,7 @@ final class InputSchema {
         return Proxy.newProxyInstance(type.getClassLoader(), new Class<?>[]{type}, handler);
     }
 
-    private static Component component(Class<?> owner, String name, Method accessor) {
+    private static Component component(Class<?> owner, String name, Method accessor, boolean hasDefault) {
         String description = "Input '" + name + "' of " + owner.getName();
         Kind kind = kindOf(accessor.getGenericReturnType(), description, true);
         boolean optional = isNullable(accessor.getAnnotations())
@@ -121,7 +128,7 @@ final class InputSchema {
         if (optional && accessor.getReturnType().isPrimitive()) {
             throw new InvalidUserDataException(description + " is primitive and cannot be optional.");
         }
-        return new Component(name, accessor, kind, optional);
+        return new Component(name, accessor, kind, optional, hasDefault);
     }
 
     private static Kind kindOf(Type type, String description, boolean topLevel) {
