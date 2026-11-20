@@ -167,6 +167,14 @@ work.register("listCopies", ListFiles::class) {
 - Files inside nested values are rejected. Nested records are value inputs.
 - All work shows up as the task type `WorkFunctionTask`.
 
+## Related work
+
+[Gratatouille](https://github.com/GradleUp/gratatouille) has the same idea: a task is a function, its parameters are the inputs, and the output locations are assigned for you.
+With Gratatouille you write Kotlin functions, and a KSP processor generates the tasks, the workers and the wiring code.
+
+This plugin is similar, but uses no code generation.
+Inputs are bound at runtime with method references, so work functions can be written and wired in Java as well as Kotlin.
+
 ## Build
 
 ```
