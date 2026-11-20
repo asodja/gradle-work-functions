@@ -8,6 +8,7 @@ import static org.gradle.testkit.runner.TaskOutcome.UP_TO_DATE
 class KotlinWorkFunctionsSpec extends AbstractWorkFunctionsSpec {
 
     static final String GREETING_SCRIPT = '''
+        import dev.workfunctions.OutputName
         import dev.workfunctions.WorkFunction
 
         plugins {
@@ -32,7 +33,7 @@ class KotlinWorkFunctionsSpec extends AbstractWorkFunctionsSpec {
                 val text: RegularFile
             }
 
-            override fun run(input: In, output: RegularFile) {
+            override fun run(input: In, @OutputName("shout.txt") output: RegularFile) {
                 output.asFile.writeText(input.text.asFile.readText().uppercase())
             }
         }
@@ -63,7 +64,7 @@ class KotlinWorkFunctionsSpec extends AbstractWorkFunctionsSpec {
         then:
         workTasks(result) == [":greet", ":shout"]
         file("build/work/greet/greet").text == "Hello, world!"
-        file("build/work/shout/shout").text == "HELLO, WORLD!"
+        file("build/work/shout/shout.txt").text == "HELLO, WORLD!"
 
         when:
         result = succeeds("shout", "-Pwho=world")
@@ -76,7 +77,7 @@ class KotlinWorkFunctionsSpec extends AbstractWorkFunctionsSpec {
         succeeds("shout", "-Pwho=world", "-Pformal=true")
 
         then:
-        file("build/work/shout/shout").text == "HELLO, DR. WORLD."
+        file("build/work/shout/shout.txt").text == "HELLO, DR. WORLD."
     }
 
     def "supports a data class with a nullable input and a default value"() {
@@ -128,7 +129,7 @@ class KotlinWorkFunctionsSpec extends AbstractWorkFunctionsSpec {
             abstract class Split : WorkFunction<Split.In, Split.Out> {
                 data class In(val text: String)
 
-                data class Out(@get:OutputName("first.txt") val first: RegularFile, val rest: Directory)
+                data class Out(@OutputName("first.txt") val first: RegularFile, val rest: Directory)
 
                 override fun run(input: In, output: Out) {
                     val words = input.text.split(" ")

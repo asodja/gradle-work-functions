@@ -31,16 +31,18 @@ final class OutputSchema {
     static OutputSchema of(Class<?> type, Class<?> functionType, String workName) {
         List<Output> outputs = new ArrayList<>();
         List<KotlinTypes.Parameter> parameters = KotlinTypes.dataClassParameters(type);
+        OutputName parameterName = outputParameterName(functionType);
         if (type == Directory.class || type == RegularFile.class) {
-            OutputName name = functionType.getAnnotation(OutputName.class);
-            outputs.add(new Output("output", type == Directory.class, name == null ? workName : name.value()));
+            outputs.add(new Output("output", type == Directory.class, parameterName == null ? workName : parameterName.value()));
+        } else if (parameterName != null) {
+            throw new InvalidUserDataException("@OutputName on the output parameter of " + functionType.getName() + " only applies to a single output. Put it on the components of " + type.getSimpleName() + ".");
         } else if (parameters != null) {
             for (KotlinTypes.Parameter parameter : parameters) {
-                outputs.add(output(type, parameter.getName(), parameter.getGetter()));
+                outputs.add(output(type, parameter.getName(), parameter.getGetter().getReturnType(), parameter.annotation(OutputName.class)));
             }
         } else if (type.isRecord()) {
             for (RecordComponent component : type.getRecordComponents()) {
-                outputs.add(output(type, component.getName(), component.getAccessor()));
+                outputs.add(output(type, component.getName(), component.getType(), component.getAnnotation(OutputName.class)));
             }
         } else {
             throw new InvalidUserDataException("Output type " + type.getName() + " must be a Directory, a RegularFile, a record of those, or a Kotlin data class of those.");
@@ -73,13 +75,22 @@ final class OutputSchema {
         return constructor.newInstance(locations.toArray());
     }
 
-    private static Output output(Class<?> owner, String name, Method accessor) {
-        Class<?> outputType = accessor.getReturnType();
+    private static Output output(Class<?> owner, String name, Class<?> outputType, OutputName fileName) {
         if (outputType != Directory.class && outputType != RegularFile.class) {
             throw new InvalidUserDataException("Output '" + name + "' of " + owner.getName() + " must be a Directory or a RegularFile.");
         }
-        // On a record component the annotation is also present on the accessor.
-        OutputName fileName = accessor.getAnnotation(OutputName.class);
         return new Output(name, outputType == Directory.class, fileName == null ? name : fileName.value());
+    }
+
+    private static OutputName outputParameterName(Class<?> functionType) {
+        for (Method method : functionType.getMethods()) {
+            if (method.getName().equals("run") && method.getParameterCount() == 2 && !method.isBridge()) {
+                OutputName name = method.getParameters()[1].getAnnotation(OutputName.class);
+                if (name != null) {
+                    return name;
+                }
+            }
+        }
+        return null;
     }
 }

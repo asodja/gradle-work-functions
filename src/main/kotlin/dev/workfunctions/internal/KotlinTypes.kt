@@ -13,7 +13,12 @@ import kotlin.reflect.jvm.javaGetter
  */
 internal object KotlinTypes {
 
-    class Parameter(val name: String, val getter: Method, val hasDefault: Boolean)
+    class Parameter(val name: String, val getter: Method, val hasDefault: Boolean, private val annotations: List<Annotation>) {
+
+        // Kotlin puts an annotation on the constructor parameter unless it says `@get:`, so both places are read.
+        fun <A : Annotation> annotation(type: Class<A>): A? =
+            annotations.firstNotNullOfOrNull { if (type.isInstance(it)) type.cast(it) else null } ?: getter.getAnnotation(type)
+    }
 
     @JvmStatic
     fun isNullable(type: Class<*>, accessorName: String): Boolean {
@@ -42,7 +47,7 @@ internal object KotlinTypes {
         return constructor.parameters.map { parameter ->
             val getter = kotlinClass.memberProperties.first { it.name == parameter.name }.javaGetter
                 ?: throw InvalidUserDataException("Input '${parameter.name}' of ${type.name} must not be private.")
-            Parameter(parameter.name!!, getter, parameter.isOptional)
+            Parameter(parameter.name!!, getter, parameter.isOptional, parameter.annotations)
         }
     }
 

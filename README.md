@@ -41,6 +41,7 @@ abstract class GenerateVersion : WorkFunction<GenerateVersion.In, Directory> {
 - A component annotated with any `@Nullable`, or with a nullable Kotlin type, is optional.
 - An input that is not bound uses its default: a default method of an interface, or a default value of a Kotlin data class.
 - The output is a `Directory`, a `RegularFile`, or a record or Kotlin data class of those. Gradle assigns the location under `build/work/<name>`.
+- `@OutputName` sets the file name of an output. Put it on the output parameter of `run`, or on a component when there are several outputs.
 - File inputs use relative path sensitivity. Use `@Classpath`, `@CompileClasspath` or `@PathSensitive` on a component to change it.
 
 ## Register and wire work
@@ -48,13 +49,12 @@ abstract class GenerateVersion : WorkFunction<GenerateVersion.In, Directory> {
 The wiring below uses a second work function. It reads a directory and writes one file:
 
 ```java
-@OutputName("checksums.txt")
 public abstract class Checksum implements WorkFunction<Checksum.In, RegularFile> {
 
     public record In(Directory files) {}
 
     @Override
-    public void run(In input, RegularFile output) throws Exception {
+    public void run(In input, @OutputName("checksums.txt") RegularFile output) throws Exception {
         List<String> lines = new ArrayList<>();
         for (File file : new TreeSet<>(input.files().getAsFileTree().getFiles())) {
             byte[] hash = MessageDigest.getInstance("SHA-256").digest(Files.readAllBytes(file.toPath()));
@@ -66,12 +66,11 @@ public abstract class Checksum implements WorkFunction<Checksum.In, RegularFile>
 ```
 
 ```kotlin
-@OutputName("checksums.txt")
 abstract class Checksum : WorkFunction<Checksum.In, RegularFile> {
 
     data class In(val files: Directory)
 
-    override fun run(input: In, output: RegularFile) {
+    override fun run(input: In, @OutputName("checksums.txt") output: RegularFile) {
         val lines = input.files.asFileTree.files.sorted().map { file ->
             val hash = MessageDigest.getInstance("SHA-256").digest(file.readBytes())
             hash.joinToString("") { "%02x".format(it) } + "  " + file.name
@@ -165,7 +164,7 @@ abstract class Report : WorkFunction<Report.In, Report.Out> {
 
     data class In(val sources: FileCollection, val title: String)
 
-    data class Out(@get:OutputName("report.txt") val report: RegularFile, val copies: Directory)
+    data class Out(@OutputName("report.txt") val report: RegularFile, val copies: Directory)
 
     override fun run(input: In, output: Out) {
         val lines = mutableListOf(input.title)

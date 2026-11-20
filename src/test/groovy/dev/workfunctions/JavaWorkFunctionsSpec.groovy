@@ -16,7 +16,7 @@ class JavaWorkFunctionsSpec extends AbstractWorkFunctionsSpec {
         then:
         workTasks(result) == [":generateVersion", ":countLines", ":verify"]
         file("build/work/generateVersion/version.properties").text == "version=1.0"
-        file("build/work/countLines/countLines").text == "lines=1"
+        file("build/work/countLines/lines.txt").text == "lines=1"
     }
 
     def "is up to date when nothing changed"() {
@@ -57,7 +57,7 @@ class JavaWorkFunctionsSpec extends AbstractWorkFunctionsSpec {
 
         then:
         result.task(":generateVersion").outcome == SUCCESS
-        file("build/work/countLines/countLines").text == "lines=2"
+        file("build/work/countLines/lines.txt").text == "lines=2"
     }
 
     def "loads outputs from the build cache in another location"() {
@@ -346,7 +346,7 @@ class JavaWorkFunctionsSpec extends AbstractWorkFunctionsSpec {
                 public record In(Directory files) {}
 
                 @Override
-                public void run(In input, RegularFile output) throws Exception {
+                public void run(In input, @OutputName("lines.txt") RegularFile output) throws Exception {
                     int lines = 0;
                     for (File file : input.files().getAsFileTree()) {
                         lines += Files.readAllLines(file.toPath()).size();
