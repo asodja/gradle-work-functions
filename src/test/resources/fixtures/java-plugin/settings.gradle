@@ -1,0 +1,10 @@
+rootProject.name = 'fixture'
+
+def cacheDir = providers.gradleProperty('cacheDir').orNull
+if (cacheDir != null) {
+    buildCache {
+        local {
+            directory = new File(cacheDir)
+        }
+    }
+}
