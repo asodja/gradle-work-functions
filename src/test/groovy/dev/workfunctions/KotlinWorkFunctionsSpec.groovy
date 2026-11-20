@@ -37,14 +37,14 @@ class KotlinWorkFunctionsSpec extends AbstractWorkFunctionsSpec {
             }
         }
 
-        val greeting = works.work("greet", Greet::class) {
+        val greeting = work.register("greet", Greet::class) {
             val formal = providers.gradleProperty("formal")
             bind(Greet.In::name).to(providers.gradleProperty("who"))
             bind(Greet.In::title).to(formal.map { "Dr. " })
             bind(Greet.In::punctuation).to(formal.map { "." })
         }
 
-        works.work("shout", Shout::class) {
+        work.register("shout", Shout::class) {
             bind(Shout.In::text).to(greeting)
         }
     '''
@@ -96,7 +96,7 @@ class KotlinWorkFunctionsSpec extends AbstractWorkFunctionsSpec {
                 }
             }
 
-            works.work("greet", Greet::class) {
+            work.register("greet", Greet::class) {
                 bind(Greet.In::name).to(providers.gradleProperty("who"))
                 bind(Greet.In::punctuation).to(providers.gradleProperty("punctuation"))
             }

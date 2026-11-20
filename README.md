@@ -30,17 +30,17 @@ public abstract class GenerateVersion implements WorkFunction<GenerateVersion.In
 ## Register and wire work
 
 ```java
-Works works = project.getExtensions().getByType(Works.class);
+WorkRegistry work = project.getExtensions().getByType(WorkRegistry.class);
 
-Provider<Directory> versionInfo = works.work("generateVersion", GenerateVersion.class, inputs -> {
+Provider<Directory> versionInfo = work.register("generateVersion", GenerateVersion.class, inputs -> {
     inputs.bind(GenerateVersion.In::version).to(providers.gradleProperty("appVersion"));
     inputs.bind(GenerateVersion.In::template).to(layout.getProjectDirectory().file("version.tpl"));
 });
 
-Provider<RegularFile> checksums = works.work("checksumVersion", Checksum.class, inputs ->
+Provider<RegularFile> checksums = work.register("checksumVersion", Checksum.class, inputs ->
     inputs.bind(Checksum.In::files).to(versionInfo));
 
-works.lifecycle("check", checksums);
+work.lifecycle("check", checksums);
 ```
 
 - `bind(...).to(...)` binds a provider, a constant, a file, or a file collection.
@@ -51,7 +51,7 @@ works.lifecycle("check", checksums);
 ## Kotlin
 
 ```kotlin
-val greeting = works.work("greet", Greet::class) {
+val greeting = work.register("greet", Greet::class) {
     bind(Greet.In::name).to(providers.gradleProperty("who"))
 }
 ```

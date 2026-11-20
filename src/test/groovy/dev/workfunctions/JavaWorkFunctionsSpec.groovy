@@ -136,13 +136,13 @@ class JavaWorkFunctionsSpec extends AbstractWorkFunctionsSpec {
             }
         ''')
         plugin('''
-            Provider<Report.Out> report = works.work("report", Report.class, inputs -> {
+            Provider<Report.Out> report = work.register("report", Report.class, inputs -> {
                 inputs.bind(Report.In::sources).to(project.files("a.txt", "b.txt"));
                 inputs.bind(Report.In::style).to(providers.gradleProperty("title").map(title -> new Report.Style(title, true)));
                 inputs.bind(Report.In::footer).to(providers.gradleProperty("footer"));
             });
 
-            works.work("listCopies", ListFiles.class, inputs ->
+            work.register("listCopies", ListFiles.class, inputs ->
                 inputs.bind(ListFiles.In::files).to(report.map(Report.Out::copies)));
         ''')
         file("a.txt") << "first"
@@ -188,7 +188,7 @@ class JavaWorkFunctionsSpec extends AbstractWorkFunctionsSpec {
                 id("dev.workfunctions")
             }
 
-            works.work("greet", Greet::class) {
+            work.register("greet", Greet::class) {
                 bind(Greet.In::name).to(providers.gradleProperty("who"))
                 bind(Greet.In::loud).to(true)
             }
@@ -206,7 +206,7 @@ class JavaWorkFunctionsSpec extends AbstractWorkFunctionsSpec {
         buildSrc()
         greetFunction()
         plugin("""
-            works.work("greet", Greet.class, inputs -> $binding);
+            work.register("greet", Greet.class, inputs -> $binding);
         """)
 
         when:
@@ -234,7 +234,7 @@ class JavaWorkFunctionsSpec extends AbstractWorkFunctionsSpec {
             }
         ''')
         plugin("""
-            works.work("greet", Greet.class, inputs -> inputs.bind($selector).to("world"));
+            work.register("greet", Greet.class, inputs -> inputs.bind($selector).to("world"));
         """)
 
         when:
@@ -254,7 +254,7 @@ class JavaWorkFunctionsSpec extends AbstractWorkFunctionsSpec {
         buildSrc()
         greetFunction()
         plugin('''
-            works.work("greet", Greet.class, inputs -> {});
+            work.register("greet", Greet.class, inputs -> {});
         ''')
 
         when:
@@ -269,7 +269,7 @@ class JavaWorkFunctionsSpec extends AbstractWorkFunctionsSpec {
         buildSrc()
         greetFunction()
         plugin('''
-            works.work("greet", Greet.class, inputs -> inputs.bind(Greet.In::name).to(providers.gradleProperty("who")));
+            work.register("greet", Greet.class, inputs -> inputs.bind(Greet.In::name).to(providers.gradleProperty("who")));
         ''')
 
         when:
@@ -296,7 +296,7 @@ class JavaWorkFunctionsSpec extends AbstractWorkFunctionsSpec {
             }
         ''')
         plugin('''
-            works.work("count", Counter.class, inputs -> inputs.bind(Counter.In::name).to("x"));
+            work.register("count", Counter.class, inputs -> inputs.bind(Counter.In::name).to("x"));
         ''')
 
         when:
@@ -311,7 +311,7 @@ class JavaWorkFunctionsSpec extends AbstractWorkFunctionsSpec {
         buildSrc()
         greetFunction()
         plugin('''
-            works.work("greet", Greet.class, inputs -> inputs.bind(Greet.In::name).to("world"));
+            work.register("greet", Greet.class, inputs -> inputs.bind(Greet.In::name).to("world"));
         ''')
         file("build.gradle") << '''
             tasks.named("greet") {
@@ -356,15 +356,15 @@ class JavaWorkFunctionsSpec extends AbstractWorkFunctionsSpec {
             }
         ''')
         plugin('''
-            Provider<Directory> versionInfo = works.work("generateVersion", GenerateVersion.class, inputs -> {
+            Provider<Directory> versionInfo = work.register("generateVersion", GenerateVersion.class, inputs -> {
                 inputs.bind(GenerateVersion.In::version).to(providers.gradleProperty("appVersion"));
                 inputs.bind(GenerateVersion.In::template).to(layout.getProjectDirectory().file("version.tpl"));
             });
 
-            Provider<RegularFile> lineCount = works.work("countLines", CountLines.class, inputs ->
+            Provider<RegularFile> lineCount = work.register("countLines", CountLines.class, inputs ->
                 inputs.bind(CountLines.In::files).to(versionInfo));
 
-            works.lifecycle("verify", lineCount);
+            work.lifecycle("verify", lineCount);
         ''')
         file("version.tpl") << "version=@VERSION@"
     }
@@ -432,7 +432,7 @@ class JavaWorkFunctionsSpec extends AbstractWorkFunctionsSpec {
 
     /**
      * Writes a plugin whose apply method contains the given wiring.
-     * The wiring can use {@code project}, {@code works}, {@code providers} and {@code layout}.
+     * The wiring can use {@code project}, {@code work}, {@code providers} and {@code layout}.
      */
     private void plugin(String wiring) {
         file("buildSrc/src/main/resources/META-INF/gradle-plugins/example.properties") << "implementation-class=example.ExamplePlugin"
@@ -444,7 +444,7 @@ class JavaWorkFunctionsSpec extends AbstractWorkFunctionsSpec {
         file("buildSrc/src/main/java/example/ExamplePlugin.java") << """
             package example;
 
-            import dev.workfunctions.Works;
+            import dev.workfunctions.WorkRegistry;
             import org.gradle.api.Plugin;
             import org.gradle.api.Project;
             import org.gradle.api.file.Directory;
@@ -457,7 +457,7 @@ class JavaWorkFunctionsSpec extends AbstractWorkFunctionsSpec {
                 @Override
                 public void apply(Project project) {
                     project.getPluginManager().apply("dev.workfunctions");
-                    Works works = project.getExtensions().getByType(Works.class);
+                    WorkRegistry work = project.getExtensions().getByType(WorkRegistry.class);
                     ProviderFactory providers = project.getProviders();
                     ProjectLayout layout = project.getLayout();
                     $wiring

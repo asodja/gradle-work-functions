@@ -2,7 +2,7 @@ package dev.workfunctions.internal;
 
 import dev.workfunctions.Inputs;
 import dev.workfunctions.WorkFunction;
-import dev.workfunctions.Works;
+import dev.workfunctions.WorkRegistry;
 import org.gradle.api.Action;
 import org.gradle.api.InvalidUserDataException;
 import org.gradle.api.Project;
@@ -15,20 +15,20 @@ import javax.inject.Inject;
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
 
-public class DefaultWorks implements Works {
+public class DefaultWorkRegistry implements WorkRegistry {
 
     private static final String GROUP = "work";
 
     private final Project project;
 
     @Inject
-    public DefaultWorks(Project project) {
+    public DefaultWorkRegistry(Project project) {
         this.project = project;
     }
 
     @Override
     @SuppressWarnings("unchecked")
-    public <I, O> Provider<O> work(String name, Class<? extends WorkFunction<I, O>> type, Action<? super Inputs<I>> configuration) {
+    public <I, O> Provider<O> register(String name, Class<? extends WorkFunction<I, O>> type, Action<? super Inputs<I>> configuration) {
         Class<?>[] typeArguments = TypeArguments.of(type);
         Class<?> inputType = typeArguments[0];
         Class<?> outputType = typeArguments[1];
