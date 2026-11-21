@@ -13,7 +13,6 @@ It builds the plugin from this repository, so nothing has to be published first.
 | `checksumCopies` | `Checksum` | `build.gradle.kts` | One output of `report` used as a work input. |
 
 - The work functions and `VersionPlugin` are in `build-logic/src/main/java/example/buildlogic`.
-- The Java plugin binds with `input(...).set(...)`. The build script uses both forms.
 - Outputs are under `build/work/<name>`.
 
 ## Run it
@@ -44,6 +43,6 @@ Edit `build.gradle.kts` and run `../gradlew report`:
 
 | Change | Result |
 |---|---|
-| `input(Report.In::title).set(42)` | Script compilation error: the type does not match. |
-| `input { it.title }.set("x")` | Script compilation error: a lambda is not a selector. |
+| `bind(Report.In::title).to(42)` | Script compilation error: the type does not match. |
+| `bind { it.title }.to("x")` | Script compilation error: a lambda is not a selector. |
 | Remove the `title` line | `Input 'title' of work 'report' is not bound.` |
