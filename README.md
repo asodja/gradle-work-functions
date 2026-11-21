@@ -51,7 +51,12 @@ public abstract class Checksum implements WorkFunction<Checksum.In, RegularFile>
 
 ## Register and wire work
 
-Register each work and pass the output of one to the input of the other:
+Register each work and pass the output of one to the input of the other.
+
+There are two forms to bind an input: `bind(...).to(...)` and `input(...).set(...)`.
+They do the same. Both exist for demonstration, to compare them. The final API should keep only one.
+
+### With `bind(...).to(...)`
 
 ```java
 WorkRegistry work = project.getExtensions().getByType(WorkRegistry.class);
@@ -83,7 +88,41 @@ val checksums = work.register("checksumVersion", Checksum::class) {
 work.lifecycle("check", checksums)
 ```
 
-- `bind(...).to(...)` binds a provider, a constant, a file, or a file collection.
+### With `input(...).set(...)`
+
+```java
+WorkRegistry work = project.getExtensions().getByType(WorkRegistry.class);
+
+Provider<Directory> versionInfo = work.register("generateVersion", GenerateVersion.class, it -> {
+    it.input(GenerateVersion.In::version).set(providers.gradleProperty("appVersion"));
+    it.input(GenerateVersion.In::template).set(layout.getProjectDirectory().file("version.tpl"));
+});
+
+Provider<RegularFile> checksums = work.register("checksumVersion", Checksum.class, it -> {
+    it.input(Checksum.In::files).set(versionInfo);
+});
+
+work.lifecycle("check", checksums);
+```
+
+The same in a Kotlin build script:
+
+```kotlin
+val versionInfo = work.register("generateVersion", GenerateVersion::class) {
+    input(GenerateVersion.In::version).set(providers.gradleProperty("appVersion"))
+    input(GenerateVersion.In::template).set(layout.projectDirectory.file("version.tpl"))
+}
+
+val checksums = work.register("checksumVersion", Checksum::class) {
+    input(Checksum.In::files).set(versionInfo)
+}
+
+work.lifecycle("check", checksums)
+```
+
+### In both forms
+
+- An input is bound to a provider, a constant, a file, or a file collection.
 - Bind a provider to keep the value lazy. Nothing is read while binding.
 - Passing an output to an input adds the task dependency.
 - An input is selected with a method reference. A lambda is a compile error, in Java and in Kotlin.
@@ -143,7 +182,7 @@ work.register("checksumCopies", Checksum::class) {
 
 ## Kotlin notes
 
-- `bind` and `register` are members, so they need no import.
+- `bind`, `input` and `register` are members, so they need no import.
 - The reference can point to a Kotlin property or to a component of a Java record.
 - A lambda, a value of the wrong type and an input of another work function are compile errors.
 - A Kotlin `In` can be an interface or a data class.

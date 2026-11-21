@@ -10,6 +10,8 @@ import kotlin.reflect.jvm.javaMethod
 
 /**
  * Binds the inputs of one work function. Nothing is read while binding.
+ *
+ * `bind(In::x).to(value)` and `input(In::x).set(value)` do the same. Both exist to compare them.
  */
 interface Inputs<I : Any> {
 
@@ -36,4 +38,15 @@ interface Inputs<I : Any> {
         }
         return InputTarget(this as InputsInternal, accessor.name)
     }
+
+    /**
+     * Same as [bind].
+     */
+    fun <T> input(input: Selector<I, T>): InputTarget<T> = bind(input)
+
+    /**
+     * Same as [bind], from Kotlin.
+     */
+    @JvmSynthetic
+    fun <T, F> input(input: F): InputTarget<T> where F : KCallable<T>, F : (I) -> T = bind(input)
 }
