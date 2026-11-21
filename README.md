@@ -200,6 +200,16 @@ work.register("checksumCopies", Checksum::class) {
 - Files inside nested values are rejected. Nested records are value inputs.
 - All work shows up as the task type `WorkFunctionTask`.
 
+## Example project
+
+[example-project](example-project) is a small Java application that uses the plugin.
+It generates a source file, checksums the compiled classes and writes a report.
+
+```
+cd example-project
+../gradlew run
+```
+
 ## Build
 
 ```
