@@ -23,14 +23,27 @@ interface WorkRegistry {
      * Returns the output of existing work. The work is either registered here,
      * or it is a task that a [TaskBackedWork] describes. Nothing is created or configured.
      */
-    fun <O : Any> named(name: String, type: Class<out Work<O>>): Provider<O>
+    fun <O : Any> named(name: String, type: Class<out Work<*, O>>): Provider<O>
 
     /**
      * The same for Kotlin, with a class reference such as `CompileJava::class`. Hidden from Java.
      */
     @JvmSynthetic
-    fun <O : Any> named(name: String, type: KClass<out Work<O>>): Provider<O> =
+    fun <O : Any> named(name: String, type: KClass<out Work<*, O>>): Provider<O> =
         named(name, type.java)
+
+    /**
+     * Returns the output of existing work and binds some of its inputs.
+     * The block runs when the work is configured, after the block of `register`.
+     */
+    fun <I : Any, O : Any> named(name: String, type: Class<out Work<I, O>>, configuration: Action<in Inputs<I>>): Provider<O>
+
+    /**
+     * The same for Kotlin, with a class reference. Hidden from Java.
+     */
+    @JvmSynthetic
+    fun <I : Any, O : Any> named(name: String, type: KClass<out Work<I, O>>, configuration: Action<in Inputs<I>>): Provider<O> =
+        named(name, type.java, configuration)
 
     /**
      * Makes the lifecycle task [name] produce the given outputs. Creates the task if needed.

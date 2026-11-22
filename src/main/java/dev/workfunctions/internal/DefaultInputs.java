@@ -41,7 +41,8 @@ final class DefaultInputs<I> implements Inputs<I>, InputsInternal {
 
     private void bind(InputSchema.Component component, Object source) {
         if (source == null) {
-            bindings.remove(component.name());
+            // Kept as an entry, so that a later block can clear an earlier binding.
+            bindings.put(component.name(), null);
             return;
         }
         if (!(source instanceof Provider) && !(source instanceof FileCollection)) {

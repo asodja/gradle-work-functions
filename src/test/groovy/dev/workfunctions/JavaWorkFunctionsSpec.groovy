@@ -265,6 +265,113 @@ class JavaWorkFunctionsSpec extends AbstractWorkFunctionsSpec {
         file("build/work/listClasses/listClasses").text == "Hello.class"
     }
 
+    def "binds inputs of a task found as work"() {
+        given:
+        buildSrc()
+        compileJavaWork()
+        plugin("""
+            project.getPluginManager().apply("java");
+
+            work.named("compileJava", CompileJava.class, inputs -> {
+                inputs.bind(CompileJava.In::sources).to(project.files("other"));
+                inputs.bind(CompileJava.In::release).to(providers.gradleProperty("release").map(Integer::parseInt));
+            });
+        """)
+        file("build.gradle") << '''
+            tasks.withType(JavaCompile).configureEach {
+                println "configured $name"
+            }
+        '''
+        file("src/main/java/app/Hello.java") << "package app; public class Hello {}"
+        file("other/app/Other.java") << "package app; public class Other {}"
+
+        when: "the block does not run before the task is needed"
+        def result = succeeds("help", "-Prelease=x")
+
+        then:
+        !result.output.contains("configured compileJava")
+
+        when:
+        succeeds("compileJava", "-Prelease=11")
+
+        then: "only the bound sources are compiled, for the bound release"
+        !file("build/classes/java/main/app/Hello.class").exists()
+        classFileVersion("build/classes/java/main/app/Other.class") == 55
+
+        when:
+        succeeds("compileJava", "-Prelease=17", "--configuration-cache")
+        file("other/app/Third.java") << "package app; public class Third {}"
+        result = succeeds("compileJava", "-Prelease=17", "--configuration-cache")
+
+        then:
+        result.output.contains("Reusing configuration cache.")
+        classFileVersion("build/classes/java/main/app/Third.class") == 61
+    }
+
+    def "a Kotlin script binds inputs of a task found as work"() {
+        given:
+        buildSrc()
+        compileJavaWork()
+        file("build.gradle.kts") << '''
+            import example.CompileJava
+
+            plugins {
+                java
+                id("dev.workfunctions")
+            }
+
+            work.named("compileJava", CompileJava::class) {
+                bind(CompileJava.In::release).to(11)
+            }
+        '''
+        file("src/main/java/app/Hello.java") << "package app; public class Hello {}"
+
+        when:
+        succeeds("compileJava")
+
+        then:
+        classFileVersion("build/classes/java/main/app/Hello.class") == 55
+    }
+
+    def "binds inputs of registered work by name"() {
+        given:
+        buildSrc()
+        workFunction("Greet", '''
+            public abstract class Greet implements WorkFunction<Greet.In, RegularFile> {
+
+                public record In(String name, @Nullable String greeting) {}
+
+                @Override
+                public void run(In input, RegularFile output) throws Exception {
+                    String greeting = input.greeting() == null ? "Hello" : input.greeting();
+                    Files.writeString(output.getAsFile().toPath(), greeting + ", " + input.name());
+                }
+            }
+        ''')
+        plugin("""
+            work.register("greet", Greet.class, inputs -> {
+                $registered
+            });
+
+            work.named("greet", Greet.class, inputs -> {
+                $later
+            });
+        """)
+
+        when:
+        succeeds("greet")
+
+        then:
+        file("build/work/greet/greet").text == text
+
+        where:
+        registered                                                                            | later                                         | text
+        ''                                                                                    | 'inputs.bind(Greet.In::name).to("world");'    | "Hello, world"
+        'inputs.bind(Greet.In::name).to("world");'                                            | 'inputs.bind(Greet.In::name).to("moon");'     | "Hello, moon"
+        'inputs.bind(Greet.In::name).to("world");'                                            | 'inputs.bind(Greet.In::greeting).to("Hi");'   | "Hi, world"
+        'inputs.bind(Greet.In::name).to("world"); inputs.bind(Greet.In::greeting).to("Hi");'  | 'inputs.bind(Greet.In::greeting).to(providers.gradleProperty("none"));' | "Hello, world"
+    }
+
     def "finds registered work by name"() {
         given:
         buildSrc()
@@ -307,6 +414,7 @@ class JavaWorkFunctionsSpec extends AbstractWorkFunctionsSpec {
         "work of another type"          | 'work.named("greet", ListFiles.class)'         | "Work 'greet' is example.Greet, not example.ListFiles."
         "a task that is not registered" | 'work.named("compileJava", CompileJava.class)' | "Work 'compileJava' is not registered. example.CompileJava needs an existing JavaCompile task with this name."
         "a task of another type"        | 'work.named("help", CompileJava.class)'        | "is not a subclass of the given type (org.gradle.api.tasks.compile.JavaCompile)"
+        "work that is already configured" | 'project.getTasks().getByName("greet"); work.named("greet", Greet.class, inputs -> {})' | "Work 'greet' is already configured. Its inputs can no longer be bound."
     }
 
     def "a Kotlin script binds the inputs of a Java record"() {
@@ -514,16 +622,31 @@ class JavaWorkFunctionsSpec extends AbstractWorkFunctionsSpec {
         file("version.tpl") << "version=@VERSION@"
     }
 
+    private int classFileVersion(String path) {
+        file(path).bytes[7]
+    }
+
     private void compileJavaWork() {
         file("buildSrc/src/main/java/example/CompileJava.java") << '''
             package example;
 
+            import dev.workfunctions.BoundInputs;
             import dev.workfunctions.TaskBackedWork;
             import org.gradle.api.file.Directory;
+            import org.gradle.api.file.FileCollection;
             import org.gradle.api.provider.Provider;
             import org.gradle.api.tasks.compile.JavaCompile;
 
-            public abstract class CompileJava implements TaskBackedWork<Directory, JavaCompile> {
+            public abstract class CompileJava implements TaskBackedWork<CompileJava.In, Directory, JavaCompile> {
+
+                public record In(FileCollection sources, FileCollection classpath, int release) {}
+
+                @Override
+                public void configure(JavaCompile task, BoundInputs<In> input) {
+                    input.files(In::sources, task::setSource);
+                    input.files(In::classpath, task::setClasspath);
+                    input.value(In::release, task.getOptions().getRelease()::set);
+                }
 
                 @Override
                 public Provider<Directory> output(JavaCompile task) {

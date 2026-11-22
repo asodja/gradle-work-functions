@@ -7,6 +7,6 @@ package dev.workfunctions;
  * {@code O} is a {@code Directory}, a {@code RegularFile}, or a record of those.
  * Implementations must be stateless. Gradle creates them and may inject services.</p>
  */
-public interface WorkFunction<I, O> extends Work<O> {
+public interface WorkFunction<I, O> extends Work<I, O> {
     void run(I input, O output) throws Exception;
 }

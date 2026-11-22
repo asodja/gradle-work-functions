@@ -180,42 +180,9 @@ work.register("checksumCopies", Checksum::class) {
 }
 ```
 
-## Use an existing task as work
+## Find existing work
 
-A task that a plugin registers can be used as work.
-Describe it with a `TaskBackedWork`. It has no `run`. It only says what the output of the task is:
-
-```java
-public abstract class CompileJava implements TaskBackedWork<Directory, JavaCompile> {
-
-    @Override
-    public Provider<Directory> output(JavaCompile task) {
-        return task.getDestinationDirectory();
-    }
-}
-```
-
-Find the task with `named` and wire its output like any other:
-
-```java
-Provider<Directory> classes = work.named("compileJava", CompileJava.class);
-
-work.register("checksumClasses", Checksum.class, it -> {
-    it.input(Checksum.In::files).bind(classes);
-});
-```
-
-The same in a Kotlin build script:
-
-```kotlin
-val classes = work.named("compileJava", CompileJava::class)
-
-work.register("checksumClasses", Checksum::class) {
-    input(Checksum.In::files).bind(classes)
-}
-```
-
-`named` also finds work that was registered with `register`, for example by another plugin:
+`named` returns the output of work that is already registered, for example by another plugin:
 
 ```java
 Provider<Directory> versionInfo = work.named("generateVersion", GenerateVersion.class);
@@ -225,10 +192,79 @@ Provider<Directory> versionInfo = work.named("generateVersion", GenerateVersion.
 val versionInfo = work.named("generateVersion", GenerateVersion::class)
 ```
 
-- `named` returns the output. It does not create or configure anything.
-- The task or the work must be registered before the call, as with `tasks.named(...)`.
+With a block, `named` also binds inputs:
+
+```java
+Provider<Directory> versionInfo = work.named("generateVersion", GenerateVersion.class, it -> {
+    it.input(GenerateVersion.In::header).bind("Generated file");
+});
+```
+
+```kotlin
+val versionInfo = work.named("generateVersion", GenerateVersion::class) {
+    input(GenerateVersion.In::header).bind("Generated file")
+}
+```
+
+- `named` does not create or configure anything. The block runs when the work is configured.
+- The block runs after the block of `register`. A binding in it replaces an earlier one.
+- `register` can leave a required input unbound, if a `named` block binds it.
+- The work must be registered before the call, as with `tasks.named(...)`.
+- Once the work is configured, a new block is an error.
+
+## Use an existing task as work
+
+A task that a plugin registers can be used as work too.
+Describe it with a `TaskBackedWork`. It has no `run`. It says how the inputs reach the task, and what the output of the task is:
+
+```java
+public abstract class CompileJava implements TaskBackedWork<CompileJava.In, Directory, JavaCompile> {
+
+    public record In(FileCollection sources, FileCollection classpath, int release) {}
+
+    @Override
+    public void configure(JavaCompile task, BoundInputs<In> input) {
+        input.files(In::sources, task::setSource);
+        input.files(In::classpath, task::setClasspath);
+        input.value(In::release, task.getOptions().getRelease()::set);
+    }
+
+    @Override
+    public Provider<Directory> output(JavaCompile task) {
+        return task.getDestinationDirectory();
+    }
+}
+```
+
+Find the task with `named`, bind what should change, and wire the output like any other:
+
+```java
+Provider<Directory> classes = work.named("compileJava", CompileJava.class, it -> {
+    it.input(CompileJava.In::release).bind(17);
+});
+
+work.register("checksumClasses", Checksum.class, it -> {
+    it.input(Checksum.In::files).bind(classes);
+});
+```
+
+The same in a Kotlin build script:
+
+```kotlin
+val classes = work.named("compileJava", CompileJava::class) {
+    input(CompileJava.In::release).bind(17)
+}
+
+work.register("checksumClasses", Checksum::class) {
+    input(Checksum.In::files).bind(classes)
+}
+```
+
+- The block is optional. `work.named("compileJava", CompileJava.class)` only returns the output.
+- Only bound inputs reach the task. `input.value(...)` and `input.files(...)` do nothing for an input that is not bound.
+- `input.value(...)` passes a provider, so the value stays lazy. `input.files(...)` passes a file collection that keeps task dependencies.
 - A task keeps its own output location, such as `build/classes/java/main`.
-- The plugin that registered the task owns its inputs. The task decides caching.
+- The plugin that registered the task still owns it. The block competes with that plugin, as `tasks.named(...) { }` does. The task decides caching.
 - A task cannot be registered through `work`. Register it as usual, or let a plugin do it, then find it.
 
 ## Kotlin notes
@@ -250,6 +286,7 @@ val versionInfo = work.named("generateVersion", GenerateVersion::class)
 - No incremental work.
 - Files inside nested values are rejected. Nested records are value inputs.
 - All work shows up as the task type `WorkFunctionTask`.
+- A `TaskBackedWork` must be written in Java. `BoundInputs` has no Kotlin form yet.
 
 ## Example project
 

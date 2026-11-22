@@ -8,9 +8,9 @@ It builds the plugin from this repository, so nothing has to be published first.
 | Work | Function | Wired in | Shows |
 |---|---|---|---|
 | `generateVersion` | `GenerateVersion` | `VersionPlugin` (Java) | A work output used as a source directory of `compileJava`. |
-| `compileJava` | `CompileJava` | `build.gradle.kts` | A task of the Java plugin, found as work with `work.named`. |
+| `compileJava` | `CompileJava` | `build.gradle.kts` | A task of the Java plugin, found as work with `work.named`. The block binds `release`. |
 | `checksumClasses` | `Checksum` | `build.gradle.kts` | The output of that task used as a work input. |
-| `checksumVersion` | `Checksum` | `build.gradle.kts` | Work of `VersionPlugin`, found with `work.named`. |
+| `checksumVersion` | `Checksum` | `build.gradle.kts` | Work of `VersionPlugin`, found with `work.named`. The block binds the optional `header`. |
 | `report` | `Report` | `build.gradle.kts` | Several outputs. |
 | `checksumCopies` | `Checksum` | `build.gradle.kts` | One output of `report` used as a work input. |
 
@@ -48,5 +48,6 @@ Edit `build.gradle.kts` and run `../gradlew report`:
 | `input(Report.In::title).bind(42)` | Script compilation error: the type does not match. |
 | `input { it.title }.bind("x")` | Script compilation error: a lambda is not a selector. |
 | Remove the `title` line | `Input 'title' of work 'report' is not bound.` |
+| `input(CompileJava.In::release).bind(8)` in the `compileJava` block | `compileJava` warns that release 8 is obsolete. The block reached the task. |
 | `work.named("compileTestJava", GenerateVersion::class)` | `Work 'compileTestJava' is not registered.` |
 | `work.named("jar", CompileJava::class)` | The task `jar` is not a `JavaCompile`. |
