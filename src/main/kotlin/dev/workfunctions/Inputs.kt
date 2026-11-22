@@ -11,7 +11,7 @@ import kotlin.reflect.jvm.javaMethod
 /**
  * Binds the inputs of one work function. Nothing is read while binding.
  *
- * `bind(In::x).to(value)` and `input(In::x).set(value)` do the same. Both exist to compare them.
+ * `input(In::x).bind(value)` and `bind(In::x).to(value)` do the same. Both exist to compare them.
  */
 interface Inputs<I : Any> {
 

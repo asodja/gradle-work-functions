@@ -43,6 +43,6 @@ Edit `build.gradle.kts` and run `../gradlew report`:
 
 | Change | Result |
 |---|---|
-| `bind(Report.In::title).to(42)` | Script compilation error: the type does not match. |
-| `bind { it.title }.to("x")` | Script compilation error: a lambda is not a selector. |
+| `input(Report.In::title).bind(42)` | Script compilation error: the type does not match. |
+| `input { it.title }.bind("x")` | Script compilation error: a lambda is not a selector. |
 | Remove the `title` line | `Input 'title' of work 'report' is not bound.` |

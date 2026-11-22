@@ -11,16 +11,16 @@ application {
 }
 
 val classChecksums = work.register("checksumClasses", Checksum::class) {
-    bind(Checksum.In::files).to(tasks.compileJava.flatMap { it.destinationDirectory })
+    input(Checksum.In::files).bind(tasks.compileJava.flatMap { it.destinationDirectory })
 }
 
 val report = work.register("report", Report::class) {
-    bind(Report.In::sources).to(files("notes/a.txt", "notes/b.txt"))
-    bind(Report.In::title).to(providers.gradleProperty("reportTitle").orElse("Notes"))
+    input(Report.In::sources).bind(files("notes/a.txt", "notes/b.txt"))
+    input(Report.In::title).bind(providers.gradleProperty("reportTitle").orElse("Notes"))
 }
 
 val copyChecksums = work.register("checksumCopies", Checksum::class) {
-    bind(Checksum.In::files).to(report.map { it.copies })
+    input(Checksum.In::files).bind(report.map { it.copies })
 }
 
 work.lifecycle("check", classChecksums, copyChecksums)
