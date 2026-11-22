@@ -1,4 +1,6 @@
 import example.buildlogic.Checksum
+import example.buildlogic.CompileJava
+import example.buildlogic.GenerateVersion
 import example.buildlogic.Report
 
 plugins {
@@ -10,8 +12,15 @@ application {
     mainClass = "example.app.Main"
 }
 
+val classes = work.named("compileJava", CompileJava::class)
+val versionSources = work.named("generateVersion", GenerateVersion::class)
+
 val classChecksums = work.register("checksumClasses", Checksum::class) {
-    input(Checksum.In::files).bind(tasks.compileJava.flatMap { it.destinationDirectory })
+    input(Checksum.In::files).bind(classes)
+}
+
+val versionChecksums = work.register("checksumVersion", Checksum::class) {
+    input(Checksum.In::files).bind(versionSources)
 }
 
 val report = work.register("report", Report::class) {
@@ -23,4 +32,4 @@ val copyChecksums = work.register("checksumCopies", Checksum::class) {
     input(Checksum.In::files).bind(report.map { it.copies })
 }
 
-work.lifecycle("check", classChecksums, copyChecksums)
+work.lifecycle("check", classChecksums, versionChecksums, copyChecksums)

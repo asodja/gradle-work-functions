@@ -183,114 +183,130 @@ class JavaWorkFunctionsSpec extends AbstractWorkFunctionsSpec {
         file("build/work/greet/greet").text == "Hello, world"
     }
 
-    def "wraps a core task as work"() {
+    def "finds a task as work"() {
         given:
         buildSrc()
-        workFunction("GenerateSource", """
-            public abstract class GenerateSource implements WorkFunction<GenerateSource.In, Directory> {
-
-                public record In(String className) {}
-
-                @Override
-                public void run(In input, Directory output) throws Exception {
-                    File source = output.file("example/" + input.className() + ".java").getAsFile();
-                    source.getParentFile().mkdirs();
-                    Files.writeString(source.toPath(), "package example; public class " + input.className() + " {}");
-                }
-            }
-        """)
-        file("buildSrc/src/main/java/example/CompileJava.java") << """
-            package example;
-
-            import dev.workfunctions.BoundInputs;
-            import dev.workfunctions.TaskBackedWork;
-            import org.gradle.api.file.Directory;
-            import org.gradle.api.file.FileCollection;
-            import org.gradle.api.provider.Provider;
-            import org.gradle.api.tasks.compile.JavaCompile;
-            import org.jspecify.annotations.Nullable;
-
-            public abstract class CompileJava implements TaskBackedWork<CompileJava.In, Directory, JavaCompile> {
-
-                public record In(FileCollection sources, @Nullable FileCollection classpath, int release) {}
-
-                @Override
-                public void configure(JavaCompile task, BoundInputs<In> input, Provider<Directory> output) {
-                    task.setSource(input.files(In::sources));
-                    task.setClasspath(input.files(In::classpath));
-                    task.getOptions().getRelease().set(input.provider(In::release));
-                    task.getDestinationDirectory().set(output);
-                }
-            }
-        """
-        workFunction("ListFiles", """
-            public abstract class ListFiles implements WorkFunction<ListFiles.In, RegularFile> {
-
-                public record In(Directory files) {}
-
-                @Override
-                public void run(In input, RegularFile output) throws Exception {
-                    List<String> names = new ArrayList<>();
-                    for (File file : input.files().getAsFileTree()) {
-                        names.add(file.getName());
-                    }
-                    Collections.sort(names);
-                    Files.writeString(output.getAsFile().toPath(), String.join(",", names));
-                }
-            }
-        """)
+        compileJavaWork()
+        listFilesFunction()
         plugin("""
-            project.getPluginManager().apply("java-base");
+            project.getPluginManager().apply("java");
 
-            Provider<Directory> sources = work.register("generateSource", GenerateSource.class, inputs -> {
-                inputs.bind(GenerateSource.In::className).to(providers.gradleProperty("className"));
-            });
-
-            Provider<Directory> classes = work.registerTask("compileGenerated", CompileJava.class, inputs -> {
-                inputs.bind(CompileJava.In::sources).to(project.files(sources));
-                inputs.bind(CompileJava.In::release).to(17);
-            });
+            Provider<Directory> classes = work.named("compileJava", CompileJava.class);
 
             work.register("listClasses", ListFiles.class, inputs -> {
                 inputs.bind(ListFiles.In::files).to(classes);
             });
         """)
+        file("build.gradle") << '''
+            tasks.withType(JavaCompile).configureEach {
+                println "configured $name"
+            }
+        '''
+        file("src/main/java/app/Hello.java") << "package app; public class Hello {}"
 
-        when:
-        def result = succeeds("listClasses", "-PclassName=Hello")
+        when: "the lookup does not configure the task"
+        def result = succeeds("help")
 
         then:
-        workTasks(result) == [":generateSource", ":compileGenerated", ":listClasses"]
-        file("build/work/compileGenerated/example/Hello.class").exists()
+        !result.output.contains("configured compileJava")
+
+        when:
+        result = succeeds("listClasses")
+
+        then:
+        workTasks(result) == [":compileJava", ":listClasses"]
+        file("build/classes/java/main/app/Hello.class").exists()
         file("build/work/listClasses/listClasses").text == "Hello.class"
 
         when:
-        result = succeeds("listClasses", "-PclassName=Hello")
+        result = succeeds("listClasses")
 
         then:
-        result.task(":compileGenerated").outcome == UP_TO_DATE
+        result.task(":compileJava").outcome == UP_TO_DATE
         result.task(":listClasses").outcome == UP_TO_DATE
 
         when:
-        result = succeeds("listClasses", "-PclassName=Other")
-
-        then:
-        result.task(":compileGenerated").outcome == SUCCESS
-        file("build/work/listClasses/listClasses").text == "Other.class"
-
-        when: "the work is a real JavaCompile task"
-        result = succeeds("help", "--task", "compileGenerated")
-
-        then:
-        result.output.contains("JavaCompile")
-
-        when:
-        succeeds("listClasses", "-PclassName=Hello", "--configuration-cache")
-        result = succeeds("listClasses", "-PclassName=Third", "--configuration-cache")
+        succeeds("listClasses", "--configuration-cache")
+        file("src/main/java/app/Other.java") << "package app; public class Other {}"
+        result = succeeds("listClasses", "--configuration-cache")
 
         then:
         result.output.contains("Reusing configuration cache.")
-        file("build/work/listClasses/listClasses").text == "Third.class"
+        file("build/work/listClasses/listClasses").text == "Hello.class,Other.class"
+    }
+
+    def "a Kotlin script finds a task as work"() {
+        given:
+        buildSrc()
+        compileJavaWork()
+        listFilesFunction()
+        file("build.gradle.kts") << '''
+            import example.CompileJava
+            import example.ListFiles
+
+            plugins {
+                java
+                id("dev.workfunctions")
+            }
+
+            val classes = work.named("compileJava", CompileJava::class)
+
+            work.register("listClasses", ListFiles::class) {
+                bind(ListFiles.In::files).to(classes)
+            }
+        '''
+        file("src/main/java/app/Hello.java") << "package app; public class Hello {}"
+
+        when:
+        def result = succeeds("listClasses")
+
+        then:
+        workTasks(result) == [":compileJava", ":listClasses"]
+        file("build/work/listClasses/listClasses").text == "Hello.class"
+    }
+
+    def "finds registered work by name"() {
+        given:
+        buildSrc()
+        greetFunction()
+        plugin('''
+            work.register("greet", Greet.class, inputs -> inputs.bind(Greet.In::name).to("world"));
+
+            Provider<RegularFile> greeting = work.named("greet", Greet.class);
+            work.lifecycle("all", greeting);
+        ''')
+
+        when:
+        def result = succeeds("all")
+
+        then:
+        workTasks(result) == [":greet", ":all"]
+        file("build/work/greet/greet").text == "Hello, world"
+    }
+
+    def "rejects a lookup of #problem"() {
+        given:
+        buildSrc()
+        greetFunction()
+        compileJavaWork()
+        listFilesFunction()
+        plugin("""
+            work.register("greet", Greet.class, inputs -> inputs.bind(Greet.In::name).to("world"));
+            $lookup;
+        """)
+
+        when:
+        def result = fails("help")
+
+        then:
+        result.output.contains(error)
+
+        where:
+        problem                         | lookup                                         | error
+        "work that is not registered"   | 'work.named("missing", Greet.class)'           | "Work 'missing' is not registered."
+        "work of another type"          | 'work.named("greet", ListFiles.class)'         | "Work 'greet' is example.Greet, not example.ListFiles."
+        "a task that is not registered" | 'work.named("compileJava", CompileJava.class)' | "Work 'compileJava' is not registered. example.CompileJava needs an existing JavaCompile task with this name."
+        "a task of another type"        | 'work.named("help", CompileJava.class)'        | "is not a subclass of the given type (org.gradle.api.tasks.compile.JavaCompile)"
     }
 
     def "a Kotlin script binds the inputs of a Java record"() {
@@ -496,6 +512,44 @@ class JavaWorkFunctionsSpec extends AbstractWorkFunctionsSpec {
             work.lifecycle("verify", lineCount);
         ''')
         file("version.tpl") << "version=@VERSION@"
+    }
+
+    private void compileJavaWork() {
+        file("buildSrc/src/main/java/example/CompileJava.java") << '''
+            package example;
+
+            import dev.workfunctions.TaskBackedWork;
+            import org.gradle.api.file.Directory;
+            import org.gradle.api.provider.Provider;
+            import org.gradle.api.tasks.compile.JavaCompile;
+
+            public abstract class CompileJava implements TaskBackedWork<Directory, JavaCompile> {
+
+                @Override
+                public Provider<Directory> output(JavaCompile task) {
+                    return task.getDestinationDirectory();
+                }
+            }
+        '''
+    }
+
+    private void listFilesFunction() {
+        workFunction("ListFiles", '''
+            public abstract class ListFiles implements WorkFunction<ListFiles.In, RegularFile> {
+
+                public record In(Directory files) {}
+
+                @Override
+                public void run(In input, RegularFile output) throws Exception {
+                    List<String> names = new ArrayList<>();
+                    for (File file : input.files().getAsFileTree()) {
+                        names.add(file.getName());
+                    }
+                    Collections.sort(names);
+                    Files.writeString(output.getAsFile().toPath(), String.join(",", names));
+                }
+            }
+        ''')
     }
 
     private void greetFunction() {

@@ -2,14 +2,13 @@ package dev.workfunctions.internal;
 
 import dev.workfunctions.Inputs;
 import dev.workfunctions.TaskBackedWork;
+import dev.workfunctions.Work;
 import dev.workfunctions.WorkFunction;
 import dev.workfunctions.WorkRegistry;
 import org.gradle.api.Action;
 import org.gradle.api.InvalidUserDataException;
 import org.gradle.api.Project;
 import org.gradle.api.Task;
-import org.gradle.api.Transformer;
-import org.gradle.api.file.Directory;
 import org.gradle.api.provider.Provider;
 import org.gradle.api.tasks.TaskContainer;
 import org.gradle.api.tasks.TaskProvider;
@@ -17,14 +16,15 @@ import org.gradle.api.tasks.TaskProvider;
 import javax.inject.Inject;
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.HashMap;
+import java.util.Map;
 
 public class DefaultWorkRegistry implements WorkRegistry {
 
     private static final String GROUP = "work";
 
     private final Project project;
+    private final Map<String, Registration> registrations = new HashMap<>();
 
     @Inject
     public DefaultWorkRegistry(Project project) {
@@ -50,35 +50,47 @@ public class DefaultWorkRegistry implements WorkRegistry {
             workTask.bind(inputSchema, inputs.bindings());
         });
 
-        if (!outputSchema.isSingle()) {
-            return (Provider<O>) task.map(new WorkFunctionTask.OutputValue());
+        Provider<?> output = output(task, outputSchema);
+        registrations.put(name, new Registration(type, output));
+        return (Provider<O>) output;
+    }
+
+    private static Provider<?> output(TaskProvider<WorkFunctionTask> task, OutputSchema schema) {
+        if (!schema.isSingle()) {
+            return task.map(new WorkFunctionTask.OutputValue());
         }
-        if (outputSchema.outputs().get(0).directory()) {
-            return (Provider<O>) task.flatMap(new WorkFunctionTask.SingleDirectory());
+        if (schema.outputs().get(0).directory()) {
+            return task.flatMap(new WorkFunctionTask.SingleDirectory());
         }
-        return (Provider<O>) task.flatMap(new WorkFunctionTask.SingleFile());
+        return task.flatMap(new WorkFunctionTask.SingleFile());
     }
 
     @Override
     @SuppressWarnings("unchecked")
-    public <I, O, T extends Task> Provider<O> registerTask(String name, Class<? extends TaskBackedWork<I, O, T>> type, Action<? super Inputs<I>> configuration) {
-        Class<?>[] typeArguments = TypeArguments.of(type, TaskBackedWork.class);
-        Class<?> outputType = typeArguments[1];
-        Class<T> taskType = (Class<T>) typeArguments[2];
-        requireStateless(type);
-        InputSchema inputSchema = InputSchema.of(typeArguments[0]);
-        OutputSchema.of(outputType, type, name);
-        Provider<O> output = (Provider<O>) project.getLayout().getBuildDirectory().map(new AssignedOutput(outputType, type, name));
+    public <O> Provider<O> named(String name, Class<? extends Work<O>> type) {
+        if (TaskBackedWork.class.isAssignableFrom(type)) {
+            return taskOutput(name, (Class<? extends TaskBackedWork<O, Task>>) type);
+        }
+        Registration registration = registrations.get(name);
+        if (registration == null) {
+            throw new InvalidUserDataException("Work '" + name + "' is not registered.");
+        }
+        if (!type.isAssignableFrom(registration.type())) {
+            throw new InvalidUserDataException("Work '" + name + "' is " + registration.type().getName() + ", not " + type.getName() + ".");
+        }
+        return (Provider<O>) registration.output();
+    }
 
-        TaskProvider<T> task = project.getTasks().register(name, taskType, backingTask -> {
-            DefaultInputs<I> inputs = new DefaultInputs<>(name, inputSchema);
-            configuration.execute(inputs);
-            inputs.requireBound();
-            TaskBackedWork<I, O, T> work = project.getObjects().newInstance(type);
-            work.configure(backingTask, new DefaultBoundInputs<>(inputSchema, inputs.bindings(), project.getProviders(), project.getObjects()), output);
-        });
-        // map, not flatMap: the result must depend on the task, and the location is not a property of the task.
-        return task.map(new TaskOutput<>(output));
+    @SuppressWarnings("unchecked")
+    private <O, T extends Task> Provider<O> taskOutput(String name, Class<? extends TaskBackedWork<O, T>> type) {
+        Class<T> taskType = (Class<T>) TypeArguments.of(type, TaskBackedWork.class)[1];
+        requireStateless(type);
+        TaskContainer tasks = project.getTasks();
+        if (!tasks.getNames().contains(name)) {
+            throw new InvalidUserDataException("Work '" + name + "' is not registered. " + type.getName() + " needs an existing " + taskType.getSimpleName() + " task with this name.");
+        }
+        TaskBackedWork<O, T> work = project.getObjects().newInstance(type);
+        return tasks.named(name, taskType).flatMap(work::output);
     }
 
     @Override
@@ -95,50 +107,7 @@ public class DefaultWorkRegistry implements WorkRegistry {
         }
     }
 
-    // Named classes, not lambdas, so the configuration cache can store the output providers.
-
-    private static final class AssignedOutput implements Transformer<Object, Directory> {
-        private final Class<?> outputType;
-        private final Class<?> workType;
-        private final String name;
-
-        AssignedOutput(Class<?> outputType, Class<?> workType, String name) {
-            this.outputType = outputType;
-            this.workType = workType;
-            this.name = name;
-        }
-
-        @Override
-        public Object transform(Directory buildDirectory) {
-            OutputSchema schema = OutputSchema.of(outputType, workType, name);
-            Directory workspace = buildDirectory.dir("work/" + name);
-            List<Object> locations = new ArrayList<>();
-            for (OutputSchema.Output output : schema.outputs()) {
-                if (schema.isSingle() && output.directory()) {
-                    locations.add(workspace);
-                } else {
-                    locations.add(output.directory() ? workspace.dir(output.fileName()) : workspace.file(output.fileName()));
-                }
-            }
-            try {
-                return schema.instantiate(locations);
-            } catch (ReflectiveOperationException e) {
-                throw new IllegalStateException("Cannot create the output of work '" + name + "'.", e);
-            }
-        }
-    }
-
-    private static final class TaskOutput<O> implements Transformer<O, Task> {
-        private final Provider<O> output;
-
-        TaskOutput(Provider<O> output) {
-            this.output = output;
-        }
-
-        @Override
-        public O transform(Task task) {
-            return output.get();
-        }
+    private record Registration(Class<?> type, Provider<?> output) {
     }
 
     private static void requireStateless(Class<?> type) {

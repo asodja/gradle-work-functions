@@ -4,11 +4,16 @@ import org.gradle.api.Task;
 import org.gradle.api.provider.Provider;
 
 /**
- * Work that an existing task type does, such as {@code JavaCompile}.
+ * Describes a task of type {@code T} as work with the output {@code O}.
  *
- * <p>It has no {@code run}. It configures the task from the inputs and the assigned output location.
- * The inputs of the task decide caching, so every input of {@code I} must be passed to the task.</p>
+ * <p>The task is registered and configured elsewhere. {@link WorkRegistry#named} finds it by name.
+ * Implementations must be stateless. Gradle creates them and may inject services.</p>
  */
-public interface TaskBackedWork<I, O, T extends Task> {
-    void configure(T task, BoundInputs<I> input, Provider<O> output);
+public interface TaskBackedWork<O, T extends Task> extends Work<O> {
+
+    /**
+     * Returns the output of the task. It must come from an output property of the task,
+     * so that it carries the dependency on the task.
+     */
+    Provider<O> output(T task);
 }
