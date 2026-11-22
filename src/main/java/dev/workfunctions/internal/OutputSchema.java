@@ -84,8 +84,10 @@ final class OutputSchema {
 
     private static OutputName outputParameterName(Class<?> functionType) {
         for (Method method : functionType.getMethods()) {
-            if (method.getName().equals("run") && method.getParameterCount() == 2 && !method.isBridge()) {
-                OutputName name = method.getParameters()[1].getAnnotation(OutputName.class);
+            boolean run = method.getName().equals("run") && method.getParameterCount() == 2;
+            boolean configure = method.getName().equals("configure") && method.getParameterCount() == 3;
+            if ((run || configure) && !method.isBridge()) {
+                OutputName name = method.getParameters()[method.getParameterCount() - 1].getAnnotation(OutputName.class);
                 if (name != null) {
                     return name;
                 }

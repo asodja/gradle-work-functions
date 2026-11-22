@@ -183,6 +183,116 @@ class JavaWorkFunctionsSpec extends AbstractWorkFunctionsSpec {
         file("build/work/greet/greet").text == "Hello, world"
     }
 
+    def "wraps a core task as work"() {
+        given:
+        buildSrc()
+        workFunction("GenerateSource", """
+            public abstract class GenerateSource implements WorkFunction<GenerateSource.In, Directory> {
+
+                public record In(String className) {}
+
+                @Override
+                public void run(In input, Directory output) throws Exception {
+                    File source = output.file("example/" + input.className() + ".java").getAsFile();
+                    source.getParentFile().mkdirs();
+                    Files.writeString(source.toPath(), "package example; public class " + input.className() + " {}");
+                }
+            }
+        """)
+        file("buildSrc/src/main/java/example/CompileJava.java") << """
+            package example;
+
+            import dev.workfunctions.BoundInputs;
+            import dev.workfunctions.TaskBackedWork;
+            import org.gradle.api.file.Directory;
+            import org.gradle.api.file.FileCollection;
+            import org.gradle.api.provider.Provider;
+            import org.gradle.api.tasks.compile.JavaCompile;
+            import org.jspecify.annotations.Nullable;
+
+            public abstract class CompileJava implements TaskBackedWork<CompileJava.In, Directory, JavaCompile> {
+
+                public record In(FileCollection sources, @Nullable FileCollection classpath, int release) {}
+
+                @Override
+                public void configure(JavaCompile task, BoundInputs<In> input, Provider<Directory> output) {
+                    task.setSource(input.files(In::sources));
+                    task.setClasspath(input.files(In::classpath));
+                    task.getOptions().getRelease().set(input.provider(In::release));
+                    task.getDestinationDirectory().set(output);
+                }
+            }
+        """
+        workFunction("ListFiles", """
+            public abstract class ListFiles implements WorkFunction<ListFiles.In, RegularFile> {
+
+                public record In(Directory files) {}
+
+                @Override
+                public void run(In input, RegularFile output) throws Exception {
+                    List<String> names = new ArrayList<>();
+                    for (File file : input.files().getAsFileTree()) {
+                        names.add(file.getName());
+                    }
+                    Collections.sort(names);
+                    Files.writeString(output.getAsFile().toPath(), String.join(",", names));
+                }
+            }
+        """)
+        plugin("""
+            project.getPluginManager().apply("java-base");
+
+            Provider<Directory> sources = work.register("generateSource", GenerateSource.class, inputs -> {
+                inputs.bind(GenerateSource.In::className).to(providers.gradleProperty("className"));
+            });
+
+            Provider<Directory> classes = work.registerTask("compileGenerated", CompileJava.class, inputs -> {
+                inputs.bind(CompileJava.In::sources).to(project.files(sources));
+                inputs.bind(CompileJava.In::release).to(17);
+            });
+
+            work.register("listClasses", ListFiles.class, inputs -> {
+                inputs.bind(ListFiles.In::files).to(classes);
+            });
+        """)
+
+        when:
+        def result = succeeds("listClasses", "-PclassName=Hello")
+
+        then:
+        workTasks(result) == [":generateSource", ":compileGenerated", ":listClasses"]
+        file("build/work/compileGenerated/example/Hello.class").exists()
+        file("build/work/listClasses/listClasses").text == "Hello.class"
+
+        when:
+        result = succeeds("listClasses", "-PclassName=Hello")
+
+        then:
+        result.task(":compileGenerated").outcome == UP_TO_DATE
+        result.task(":listClasses").outcome == UP_TO_DATE
+
+        when:
+        result = succeeds("listClasses", "-PclassName=Other")
+
+        then:
+        result.task(":compileGenerated").outcome == SUCCESS
+        file("build/work/listClasses/listClasses").text == "Other.class"
+
+        when: "the work is a real JavaCompile task"
+        result = succeeds("help", "--task", "compileGenerated")
+
+        then:
+        result.output.contains("JavaCompile")
+
+        when:
+        succeeds("listClasses", "-PclassName=Hello", "--configuration-cache")
+        result = succeeds("listClasses", "-PclassName=Third", "--configuration-cache")
+
+        then:
+        result.output.contains("Reusing configuration cache.")
+        file("build/work/listClasses/listClasses").text == "Third.class"
+    }
+
     def "a Kotlin script binds the inputs of a Java record"() {
         given:
         buildSrc()

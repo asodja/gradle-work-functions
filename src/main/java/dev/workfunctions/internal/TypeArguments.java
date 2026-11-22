@@ -18,14 +18,25 @@ final class TypeArguments {
      * Returns the input and output classes of a work function type.
      */
     static Class<?>[] of(Class<?> functionType) {
-        Type[] arguments = find(functionType, Map.of());
-        if (arguments == null) {
-            throw new InvalidUserDataException(functionType.getName() + " must implement WorkFunction with type arguments.");
-        }
-        return new Class<?>[]{rawClass(arguments[0], functionType), rawClass(arguments[1], functionType)};
+        return of(functionType, WorkFunction.class);
     }
 
-    private static Type[] find(Type type, Map<TypeVariable<?>, Type> bindings) {
+    /**
+     * Returns the classes that {@code type} passes as type arguments to {@code target}.
+     */
+    static Class<?>[] of(Class<?> type, Class<?> target) {
+        Type[] arguments = find(type, target, Map.of());
+        if (arguments == null) {
+            throw new InvalidUserDataException(type.getName() + " must implement " + target.getSimpleName() + " with type arguments.");
+        }
+        Class<?>[] classes = new Class<?>[arguments.length];
+        for (int i = 0; i < arguments.length; i++) {
+            classes[i] = rawClass(arguments[i], type);
+        }
+        return classes;
+    }
+
+    private static Type[] find(Type type, Class<?> target, Map<TypeVariable<?>, Type> bindings) {
         Class<?> raw;
         if (type instanceof ParameterizedType parameterized) {
             raw = (Class<?>) parameterized.getRawType();
@@ -35,23 +46,27 @@ final class TypeArguments {
                 Type argument = parameterized.getActualTypeArguments()[i];
                 resolved.put(variables[i], argument instanceof TypeVariable<?> ? bindings.get(argument) : argument);
             }
-            if (raw == WorkFunction.class) {
-                return new Type[]{resolved.get(variables[0]), resolved.get(variables[1])};
+            if (raw == target) {
+                Type[] arguments = new Type[variables.length];
+                for (int i = 0; i < variables.length; i++) {
+                    arguments[i] = resolved.get(variables[i]);
+                }
+                return arguments;
             }
             bindings = resolved;
-        } else if (type instanceof Class<?> clazz && clazz != WorkFunction.class) {
+        } else if (type instanceof Class<?> clazz && clazz != target) {
             raw = clazz;
         } else {
             return null;
         }
         for (Type implemented : raw.getGenericInterfaces()) {
-            Type[] found = find(implemented, bindings);
+            Type[] found = find(implemented, target, bindings);
             if (found != null) {
                 return found;
             }
         }
         Type superclass = raw.getGenericSuperclass();
-        return superclass == null ? null : find(superclass, bindings);
+        return superclass == null ? null : find(superclass, target, bindings);
     }
 
     private static Class<?> rawClass(Type type, Class<?> functionType) {
@@ -61,6 +76,6 @@ final class TypeArguments {
         if (type instanceof ParameterizedType parameterized) {
             return (Class<?>) parameterized.getRawType();
         }
-        throw new InvalidUserDataException("Cannot determine the input and output types of " + functionType.getName() + ".");
+        throw new InvalidUserDataException("Cannot determine the type arguments of " + functionType.getName() + ".");
     }
 }

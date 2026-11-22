@@ -180,6 +180,46 @@ work.register("checksumCopies", Checksum::class) {
 }
 ```
 
+## Wrap a task
+
+Work can also be done by an existing task type, such as `JavaCompile`.
+Such work has no `run`. It configures the task from its inputs and from the assigned output location:
+
+```java
+public abstract class CompileJava implements TaskBackedWork<CompileJava.In, Directory, JavaCompile> {
+
+    public record In(FileCollection sources, @Nullable FileCollection classpath, int release) {}
+
+    @Override
+    public void configure(JavaCompile task, BoundInputs<In> input, Provider<Directory> output) {
+        task.setSource(input.files(In::sources));
+        task.setClasspath(input.files(In::classpath));
+        task.getOptions().getRelease().set(input.provider(In::release));
+        task.getDestinationDirectory().set(output);
+    }
+}
+```
+
+Register it with `registerTask`. The wiring is the same as for other work:
+
+```java
+Provider<Directory> classes = work.registerTask("compileGenerated", CompileJava.class, it -> {
+    it.input(CompileJava.In::sources).bind(project.files(generatedSources));
+    it.input(CompileJava.In::release).bind(17);
+});
+
+work.register("checksumClasses", Checksum.class, it -> {
+    it.input(Checksum.In::files).bind(classes);
+});
+```
+
+- `registerTask` registers a real `JavaCompile` task named `compileGenerated`. `tasks.withType(JavaCompile.class)` finds it.
+- `input.provider(...)` and `input.files(...)` return what was bound. The values stay lazy.
+- The output location is assigned, as for other work: `build/work/compileGenerated`.
+- The inputs of the task decide caching, not `In`. An input of `In` that is not passed to the task is not tracked.
+- The task stays open. Other code can still configure it with `tasks.named(...)`.
+- `JavaCompile` needs the `java-base` plugin.
+
 ## Kotlin notes
 
 - `input`, `bind` and `register` are members, so they need no import.

@@ -25,6 +25,14 @@ final class DefaultInputs<I> implements Inputs<I>, InputsInternal {
         return bindings;
     }
 
+    void requireBound() {
+        for (InputSchema.Component component : schema.components()) {
+            if (!bindings.containsKey(component.name()) && !component.optional() && !component.hasDefault()) {
+                throw new InvalidUserDataException("Input '" + component.name() + "' of work '" + workName + "' is not bound.");
+            }
+        }
+    }
+
     @Override
     public <T> InputTarget<T> bind(Selector<I, T> input) {
         return new InputTarget<>(this, SelectorResolver.resolve(input, schema).accessor().getName());
