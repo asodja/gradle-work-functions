@@ -214,7 +214,25 @@ val versionInfo = work.named("generateVersion", GenerateVersion::class) {
 
 ## Use an existing task as work
 
-A task that a plugin registers can be used as work too.
+The output of a task can be bound directly, through the task:
+
+```java
+TaskProvider<JavaCompile> compileJava = project.getTasks().named("compileJava", JavaCompile.class);
+
+work.register("checksumClasses", Checksum.class, it -> {
+    it.input(Checksum.In::files).bind(compileJava.flatMap(task -> {
+        return task.getDestinationDirectory();
+    }));
+});
+```
+
+```kotlin
+work.register("checksumClasses", Checksum::class) {
+    input(Checksum.In::files).bind(tasks.compileJava.flatMap { it.destinationDirectory })
+}
+```
+
+The alternative is to use the task as work.
 Describe it with a `TaskBackedWork`. It has no `run`. It says how the inputs reach the task, and what the output of the task is:
 
 ```java

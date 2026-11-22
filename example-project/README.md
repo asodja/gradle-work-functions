@@ -8,8 +8,9 @@ It builds the plugin from this repository, so nothing has to be published first.
 | Work | Function | Wired in | Shows |
 |---|---|---|---|
 | `generateVersion` | `GenerateVersion` | `VersionPlugin` (Java) | A work output used as a source directory of `compileJava`. |
-| `compileJava` | `CompileJava` | `build.gradle.kts` | A task of the Java plugin, found as work with `work.named`. The block binds `release`. |
-| `checksumClasses` | `Checksum` | `build.gradle.kts` | The output of that task used as a work input. |
+| `checksumClasses` | `Checksum` | `build.gradle.kts` | A task output used as a work input, with `tasks.compileJava.flatMap { it.destinationDirectory }`. |
+| `compileJava` | `CompileJava` | `build.gradle.kts` | The alternative: the same task, found as work with `work.named`. The block binds `release`. |
+| `checksumClassesFromWork` | `Checksum` | `build.gradle.kts` | The output of `work.named` used as a work input. It writes the same checksums as `checksumClasses`. |
 | `checksumVersion` | `Checksum` | `build.gradle.kts` | Work of `VersionPlugin`, found with `work.named`. The block binds the optional `header`. |
 | `report` | `Report` | `build.gradle.kts` | Several outputs. |
 | `checksumCopies` | `Checksum` | `build.gradle.kts` | One output of `report` used as a work input. |
