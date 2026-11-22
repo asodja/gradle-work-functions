@@ -18,9 +18,9 @@ public class VersionPlugin implements Plugin<Project> {
         project.getPluginManager().apply(WorkFunctionsPlugin.class);
         WorkRegistry work = project.getExtensions().getByType(WorkRegistry.class);
 
-        Provider<Directory> versionSources = work.register("generateVersion", GenerateVersion.class, inputs -> {
-            inputs.bind(GenerateVersion.In::version).to(project.getProviders().gradleProperty("appVersion"));
-            inputs.bind(GenerateVersion.In::template).to(project.getLayout().getProjectDirectory().file("Version.java.tpl"));
+        Provider<Directory> versionSources = work.register("generateVersion", GenerateVersion.class, it -> {
+            it.input(GenerateVersion.In::version).bind(project.getProviders().gradleProperty("appVersion"));
+            it.input(GenerateVersion.In::template).bind(project.getLayout().getProjectDirectory().file("Version.java.tpl"));
         });
 
         SourceSetContainer sourceSets = project.getExtensions().getByType(SourceSetContainer.class);

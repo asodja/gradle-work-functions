@@ -53,8 +53,40 @@ public abstract class Checksum implements WorkFunction<Checksum.In, RegularFile>
 
 Register each work and pass the output of one to the input of the other.
 
-There are two forms to bind an input: `bind(...).to(...)` and `input(...).set(...)`.
+There are two forms to bind an input: `input(...).bind(...)` and `bind(...).to(...)`.
 They do the same. Both exist for demonstration, to compare them. The final API should keep only one.
+
+### With `input(...).bind(...)`
+
+```java
+WorkRegistry work = project.getExtensions().getByType(WorkRegistry.class);
+
+Provider<Directory> versionInfo = work.register("generateVersion", GenerateVersion.class, it -> {
+    it.input(GenerateVersion.In::version).bind(providers.gradleProperty("appVersion"));
+    it.input(GenerateVersion.In::template).bind(layout.getProjectDirectory().file("version.tpl"));
+});
+
+Provider<RegularFile> checksums = work.register("checksumVersion", Checksum.class, it -> {
+    it.input(Checksum.In::files).bind(versionInfo);
+});
+
+work.lifecycle("check", checksums);
+```
+
+The same in a Kotlin build script:
+
+```kotlin
+val versionInfo = work.register("generateVersion", GenerateVersion::class) {
+    input(GenerateVersion.In::version).bind(providers.gradleProperty("appVersion"))
+    input(GenerateVersion.In::template).bind(layout.projectDirectory.file("version.tpl"))
+}
+
+val checksums = work.register("checksumVersion", Checksum::class) {
+    input(Checksum.In::files).bind(versionInfo)
+}
+
+work.lifecycle("check", checksums)
+```
 
 ### With `bind(...).to(...)`
 
@@ -83,38 +115,6 @@ val versionInfo = work.register("generateVersion", GenerateVersion::class) {
 
 val checksums = work.register("checksumVersion", Checksum::class) {
     bind(Checksum.In::files).to(versionInfo)
-}
-
-work.lifecycle("check", checksums)
-```
-
-### With `input(...).set(...)`
-
-```java
-WorkRegistry work = project.getExtensions().getByType(WorkRegistry.class);
-
-Provider<Directory> versionInfo = work.register("generateVersion", GenerateVersion.class, it -> {
-    it.input(GenerateVersion.In::version).set(providers.gradleProperty("appVersion"));
-    it.input(GenerateVersion.In::template).set(layout.getProjectDirectory().file("version.tpl"));
-});
-
-Provider<RegularFile> checksums = work.register("checksumVersion", Checksum.class, it -> {
-    it.input(Checksum.In::files).set(versionInfo);
-});
-
-work.lifecycle("check", checksums);
-```
-
-The same in a Kotlin build script:
-
-```kotlin
-val versionInfo = work.register("generateVersion", GenerateVersion::class) {
-    input(GenerateVersion.In::version).set(providers.gradleProperty("appVersion"))
-    input(GenerateVersion.In::template).set(layout.projectDirectory.file("version.tpl"))
-}
-
-val checksums = work.register("checksumVersion", Checksum::class) {
-    input(Checksum.In::files).set(versionInfo)
 }
 
 work.lifecycle("check", checksums)
@@ -154,13 +154,13 @@ public abstract class Report implements WorkFunction<Report.In, Report.Out> {
 `register` returns one provider for all outputs. A consumer picks one with `map`:
 
 ```java
-Provider<Report.Out> report = work.register("report", Report.class, inputs -> {
-    inputs.bind(Report.In::sources).to(project.files("a.txt", "b.txt"));
-    inputs.bind(Report.In::title).to("Sources");
+Provider<Report.Out> report = work.register("report", Report.class, it -> {
+    it.input(Report.In::sources).bind(project.files("a.txt", "b.txt"));
+    it.input(Report.In::title).bind("Sources");
 });
 
-work.register("checksumCopies", Checksum.class, inputs -> {
-    inputs.bind(Checksum.In::files).to(report.map(Report.Out::copies));
+work.register("checksumCopies", Checksum.class, it -> {
+    it.input(Checksum.In::files).bind(report.map(Report.Out::copies));
 });
 ```
 
@@ -171,18 +171,18 @@ The same in a Kotlin build script:
 
 ```kotlin
 val report = work.register("report", Report::class) {
-    bind(Report.In::sources).to(files("a.txt", "b.txt"))
-    bind(Report.In::title).to("Sources")
+    input(Report.In::sources).bind(files("a.txt", "b.txt"))
+    input(Report.In::title).bind("Sources")
 }
 
 work.register("checksumCopies", Checksum::class) {
-    bind(Checksum.In::files).to(report.map { it.copies })
+    input(Checksum.In::files).bind(report.map { it.copies })
 }
 ```
 
 ## Kotlin notes
 
-- `bind`, `input` and `register` are members, so they need no import.
+- `input`, `bind` and `register` are members, so they need no import.
 - The reference can point to a Kotlin property or to a component of a Java record.
 - A lambda, a value of the wrong type and an input of another work function are compile errors.
 - A Kotlin `In` can be an interface or a data class.
