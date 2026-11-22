@@ -166,13 +166,13 @@ class JavaWorkFunctionsSpec extends AbstractWorkFunctionsSpec {
         file("build/work/report/report.txt").readLines() == ["Files", "1. a.txt", "2. b.txt", "end"]
     }
 
-    def "binds inputs with input and set"() {
+    def "binds inputs with input and bind"() {
         given:
         buildSrc()
         greetFunction()
         plugin('''
             work.register("greet", Greet.class, it -> {
-                it.input(Greet.In::name).set(providers.gradleProperty("who"));
+                it.input(Greet.In::name).bind(providers.gradleProperty("who"));
             });
         ''')
 
@@ -237,8 +237,8 @@ class JavaWorkFunctionsSpec extends AbstractWorkFunctionsSpec {
         problem                       | binding                                         | error
         "a value of the wrong type"   | 'inputs.bind(Greet.In::name).to(42)'            | "no suitable method found for to(int)"
         "a lambda as selector"        | 'inputs.bind(input -> input.name()).to("x")'    | "invalid functional descriptor for lambda expression"
-        "a wrong type with set"       | 'inputs.input(Greet.In::name).set(42)'          | "no suitable method found for set(int)"
-        "a lambda with input"         | 'inputs.input(input -> input.name()).set("x")'  | "invalid functional descriptor for lambda expression"
+        "a wrong type with bind"      | 'inputs.input(Greet.In::name).bind(42)'         | "no suitable method found for bind(int)"
+        "a lambda with input"         | 'inputs.input(input -> input.name()).bind("x")' | "invalid functional descriptor for lambda expression"
     }
 
     def "rejects a selector that is #problem"() {

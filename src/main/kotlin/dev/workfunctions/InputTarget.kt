@@ -17,12 +17,12 @@ class InputTarget<T> internal constructor(private val inputs: InputsInternal, pr
     /**
      * Same as [to].
      */
-    fun set(value: T) = to(value)
+    fun bind(value: T) = to(value)
 
     /**
      * Same as [to].
      */
-    fun set(source: Provider<out (T & Any)>) = to(source)
+    fun bind(source: Provider<out (T & Any)>) = to(source)
 
     // Kotlin only. Without this member, a value of the wrong type resolves to the stdlib `to`,
     // which builds a Pair and binds nothing. Hidden from Java, where it would accept any value.

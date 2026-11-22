@@ -80,11 +80,11 @@ class KotlinWorkFunctionsSpec extends AbstractWorkFunctionsSpec {
         file("build/work/shout/shout.txt").text == "HELLO, DR. WORLD."
     }
 
-    def "binds inputs with input and set"() {
+    def "binds inputs with input and bind"() {
         given:
         file("build.gradle.kts") << GREETING_SCRIPT
-            .replace('bind(Greet.In::name).to(providers.gradleProperty("who"))', 'input(Greet.In::name).set(providers.gradleProperty("who"))')
-            .replace('bind(Greet.In::title).to(formal.map { "Dr. " })', 'input(Greet.In::title).set(null)')
+            .replace('bind(Greet.In::name).to(providers.gradleProperty("who"))', 'input(Greet.In::name).bind(providers.gradleProperty("who"))')
+            .replace('bind(Greet.In::title).to(formal.map { "Dr. " })', 'input(Greet.In::title).bind(null)')
 
         when:
         succeeds("greet", "-Pwho=world", "-Pformal=true")
@@ -211,15 +211,15 @@ class KotlinWorkFunctionsSpec extends AbstractWorkFunctionsSpec {
         result.output.contains(error)
 
         where:
-        problem                             | binding                                                | error
-        "a value of the wrong type"         | 'bind(Greet.In::name).to(42)'                          | "The value does not match the type of the input."
-        "a provider of the wrong type"      | 'bind(Greet.In::name).to(providers.provider { 42 })'   | "The value does not match the type of the input."
-        "a lambda as selector"              | 'bind { it.name }.to("world")'                         | "Cannot infer type for type parameter"
-        "an input of another work function" | 'bind(Shout.In::text).to(greeting)'                    | "Cannot infer type for type parameter"
-        "a wrong type with set"             | 'input(Greet.In::name).set(42)'                        | "Argument type mismatch"
-        "a wrong provider with set"         | 'input(Greet.In::name).set(providers.provider { 42 })' | "Argument type mismatch"
-        "null for a required input"         | 'input(Greet.In::name).set(null)'                      | "Null cannot be a value of a non-null type"
-        "a lambda with input"               | 'input { it.name }.set("world")'                       | "Cannot infer type for type parameter"
+        problem                             | binding                                                 | error
+        "a value of the wrong type"         | 'bind(Greet.In::name).to(42)'                           | "The value does not match the type of the input."
+        "a provider of the wrong type"      | 'bind(Greet.In::name).to(providers.provider { 42 })'    | "The value does not match the type of the input."
+        "a lambda as selector"              | 'bind { it.name }.to("world")'                          | "Cannot infer type for type parameter"
+        "an input of another work function" | 'bind(Shout.In::text).to(greeting)'                     | "Cannot infer type for type parameter"
+        "a wrong type with bind"            | 'input(Greet.In::name).bind(42)'                        | "Argument type mismatch"
+        "a wrong provider with bind"        | 'input(Greet.In::name).bind(providers.provider { 42 })' | "Argument type mismatch"
+        "null for a required input"         | 'input(Greet.In::name).bind(null)'                      | "Null cannot be a value of a non-null type"
+        "a lambda with input"               | 'input { it.name }.bind("world")'                       | "Cannot infer type for type parameter"
     }
 
     def "rejects a reference that is not an input"() {
