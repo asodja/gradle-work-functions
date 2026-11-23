@@ -220,9 +220,7 @@ The output of a task can be bound directly, through the task:
 TaskProvider<JavaCompile> compileJava = project.getTasks().named("compileJava", JavaCompile.class);
 
 work.register("checksumClasses", Checksum.class, it -> {
-    it.input(Checksum.In::files).bind(compileJava.flatMap(task -> {
-        return task.getDestinationDirectory();
-    }));
+    it.input(Checksum.In::files).bind(compileJava.flatMap(task -> task.getDestinationDirectory()));
 });
 ```
 
