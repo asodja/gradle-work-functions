@@ -370,6 +370,8 @@ class JavaWorkFunctionsSpec extends AbstractWorkFunctionsSpec {
         'inputs.bind(Greet.In::name).to("world");'                                            | 'inputs.bind(Greet.In::name).to("moon");'     | "Hello, moon"
         'inputs.bind(Greet.In::name).to("world");'                                            | 'inputs.bind(Greet.In::greeting).to("Hi");'   | "Hi, world"
         'inputs.bind(Greet.In::name).to("world"); inputs.bind(Greet.In::greeting).to("Hi");'  | 'inputs.bind(Greet.In::greeting).to(providers.gradleProperty("none"));' | "Hello, world"
+        'inputs.bind(Greet.In::name).to("world");'                                            | 'inputs.input(Greet.In::name).update(name -> name + "!");' | "Hello, world!"
+        'inputs.bind(Greet.In::name).to("world");'                                            | 'inputs.input(Greet.In::greeting).rebind(current -> current.orElse("Hi"));' | "Hi, world"
     }
 
     def "finds registered work by name"() {
@@ -415,6 +417,141 @@ class JavaWorkFunctionsSpec extends AbstractWorkFunctionsSpec {
         "a task that is not registered" | 'work.named("compileJava", CompileJava.class)' | "Work 'compileJava' is not registered. example.CompileJava needs an existing JavaCompile task with this name."
         "a task of another type"        | 'work.named("help", CompileJava.class)'        | "is not a subclass of the given type (org.gradle.api.tasks.compile.JavaCompile)"
         "work that is already configured" | 'project.getTasks().getByName("greet"); work.named("greet", Greet.class, inputs -> {})' | "Work 'greet' is already configured. Its inputs can no longer be bound."
+    }
+
+    def "updates the value of an input lazily"() {
+        given:
+        buildSrc()
+        greetFunction()
+        plugin('''
+            work.register("greet", Greet.class, it -> {
+                it.input(Greet.In::name).bind(providers.gradleProperty("who"));
+                it.input(Greet.In::name).update(name -> name.toUpperCase());
+                it.input(Greet.In::name).update(providers.gradleProperty("mark"), (name, mark) -> name + mark);
+            });
+        ''')
+
+        when:
+        succeeds("greet", "-Pwho=world", "-Pmark=!", "--configuration-cache")
+
+        then:
+        file("build/work/greet/greet").text == "Hello, WORLD!"
+
+        when:
+        def result = succeeds("greet", "-Pwho=moon", "-Pmark=?", "--configuration-cache")
+
+        then:
+        result.output.contains("Reusing configuration cache.")
+        file("build/work/greet/greet").text == "Hello, MOON?"
+    }
+
+    def "updates an input that is bound to a constant"() {
+        given:
+        buildSrc()
+        greetFunction()
+        plugin('''
+            work.register("greet", Greet.class, it -> {
+                it.input(Greet.In::name).bind("world");
+                it.input(Greet.In::name).update(name -> name + "!");
+            });
+        ''')
+
+        when:
+        succeeds("greet", "--configuration-cache")
+        def result = succeeds("greet", "--configuration-cache")
+
+        then:
+        result.output.contains("Reusing configuration cache.")
+        file("build/work/greet/greet").text == "Hello, world!"
+    }
+
+    def "rebinds an input to a source that falls back to the current one"() {
+        given:
+        buildSrc()
+        greetFunction()
+        plugin('''
+            work.register("greet", Greet.class, it -> {
+                it.input(Greet.In::name).bind("world");
+                it.input(Greet.In::name).rebind(current -> providers.gradleProperty("who").orElse(current));
+            });
+        ''')
+
+        when:
+        succeeds("greet", "--configuration-cache")
+
+        then:
+        file("build/work/greet/greet").text == "Hello, world"
+
+        when:
+        def result = succeeds("greet", "-Pwho=moon", "--configuration-cache")
+
+        then:
+        result.output.contains("Reusing configuration cache.")
+        file("build/work/greet/greet").text == "Hello, moon"
+    }
+
+    def "changes a file collection with #form and keeps its dependencies"() {
+        given:
+        buildSrc()
+        greetFunction()
+        workFunction("Names", '''
+            public abstract class Names implements WorkFunction<Names.In, RegularFile> {
+
+                public record In(FileCollection files) {}
+
+                @Override
+                public void run(In input, RegularFile output) throws Exception {
+                    List<String> names = new ArrayList<>();
+                    for (File file : input.files()) {
+                        names.add(file.getName());
+                    }
+                    Collections.sort(names);
+                    Files.writeString(output.getAsFile().toPath(), String.join(",", names));
+                }
+            }
+        ''')
+        plugin("""
+            Provider<RegularFile> greeting = work.register("greet", Greet.class, it -> it.input(Greet.In::name).bind("world"));
+
+            Provider<RegularFile> other = work.register("other", Greet.class, it -> it.input(Greet.In::name).bind("x"));
+            // Created here, because a lazy lambda must not capture the project.
+            FileCollection more = project.files("a.txt");
+            work.register("names", Names.class, it -> {
+                it.input(Names.In::files).bind(project.files(greeting));
+                it.input(Names.In::files).$change;
+            });
+        """)
+        file("a.txt") << "first"
+
+        when:
+        def result = succeeds("names", "-Pextra=a.txt", "--configuration-cache")
+
+        then:
+        workTasks(result) as Set == tasks as Set
+        file("build/work/names/names").text == "a.txt,greet"
+
+        where:
+        form                       | tasks                          | change
+        "update"                   | [":greet", ":names"]           | 'update(current -> current.plus(more))'
+        "update and a source"      | [":greet", ":names"]           | 'update(providers.gradleProperty("extra"), (current, extra) -> current.plus(layout.files(extra)))'
+        "update and a work output" | [":greet", ":other", ":names"] | 'update(other, (current, ignored) -> current.plus(more))'
+        "rebind"                   | [":greet", ":names"]           | 'rebind(current -> current.map(files -> files.plus(more)))'
+        "rebind and a work output" | [":greet", ":other", ":names"] | 'rebind(current -> current.zip(other, (files, ignored) -> files.plus(more)))'
+    }
+
+    def "rejects an update of an input that is not bound"() {
+        given:
+        buildSrc()
+        greetFunction()
+        plugin('''
+            work.register("greet", Greet.class, it -> it.input(Greet.In::name).update(name -> name + "!"));
+        ''')
+
+        when:
+        def result = fails("greet")
+
+        then:
+        result.output.contains("Input 'name' of work 'greet' is not bound, so there is no value to update. Bind it first.")
     }
 
     def "a Kotlin script binds the inputs of a Java record"() {
@@ -754,6 +891,7 @@ class JavaWorkFunctionsSpec extends AbstractWorkFunctionsSpec {
             import org.gradle.api.Plugin;
             import org.gradle.api.Project;
             import org.gradle.api.file.Directory;
+            import org.gradle.api.file.FileCollection;
             import org.gradle.api.file.ProjectLayout;
             import org.gradle.api.file.RegularFile;
             import org.gradle.api.provider.Provider;

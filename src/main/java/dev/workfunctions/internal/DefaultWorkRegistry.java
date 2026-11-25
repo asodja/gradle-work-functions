@@ -49,7 +49,7 @@ public class DefaultWorkRegistry implements WorkRegistry {
             workTask.setGroup(GROUP);
             workTask.setDescription("Runs " + type.getSimpleName() + ".");
             workTask.initialize(type, inputType, outputType);
-            DefaultInputs<I> inputs = new DefaultInputs<>(name, inputSchema);
+            DefaultInputs<I> inputs = new DefaultInputs<>(name, inputSchema, project.getProviders());
             configuration.execute(inputs);
             registration.configured = true;
             for (Action<Object> later : registration.laterConfigurations) {
@@ -121,7 +121,7 @@ public class DefaultWorkRegistry implements WorkRegistry {
         TaskProvider<T> task = tasks.named(name, taskType);
         if (configuration != null) {
             task.configure(backingTask -> {
-                DefaultInputs<I> inputs = new DefaultInputs<>(name, inputSchema);
+                DefaultInputs<I> inputs = new DefaultInputs<>(name, inputSchema, project.getProviders());
                 configuration.execute(inputs);
                 work.configure(backingTask, new DefaultBoundInputs<>(inputSchema, inputs.bindings(), project.getProviders(), project.getObjects()));
             });

@@ -127,6 +127,39 @@ work.lifecycle("check", checksums)
 - Passing an output to an input adds the task dependency.
 - An input is selected with a method reference. A lambda is a compile error, in Java and in Kotlin.
 
+## Change a bound input
+
+`update` and `rebind` change an input that is already bound:
+
+```java
+work.register("generateVersion", GenerateVersion.class, it -> {
+    it.input(GenerateVersion.In::version).bind("1.0");
+    it.input(GenerateVersion.In::version).update(version -> version + "-SNAPSHOT");
+    it.input(GenerateVersion.In::version).update(providers.gradleProperty("build"), (version, build) -> version + "+" + build);
+    it.input(GenerateVersion.In::version).rebind(current -> providers.gradleProperty("appVersion").orElse(current));
+});
+```
+
+The same in a Kotlin build script:
+
+```kotlin
+work.register("generateVersion", GenerateVersion::class) {
+    input(GenerateVersion.In::version).bind("1.0")
+    input(GenerateVersion.In::version).update { it + "-SNAPSHOT" }
+    input(GenerateVersion.In::version).update(providers.gradleProperty("build")) { version, build -> "$version+$build" }
+    input(GenerateVersion.In::version).rebind { current -> providers.gradleProperty("appVersion").orElse(current) }
+}
+```
+
+- `update` derives a new value from the current value. With a provider as the first argument, it also gets the value of that provider.
+- `rebind` builds a new source from the current source. Use it for what a value cannot express, such as a fallback with `orElse`.
+- Both stay lazy. The lambda of `update` runs when the value is read. The lambda of `rebind` runs at once, but gets a provider and must not read it.
+- `update` fails when the input is not bound. `rebind` then gets a source without a value.
+- The lambda of `update` does not run when there is no value.
+- For a `FileCollection` input, the lambda of the one-argument `update` runs at once, because the collection is lazy itself.
+- A lambda that runs late must not capture the `Project`. The configuration cache rejects it.
+- Both work in `named` for registered work. For work backed by a task they only see what the same `named` call bound, not the state of the task.
+
 ## Several outputs
 
 Make the output type a record with one component per output:

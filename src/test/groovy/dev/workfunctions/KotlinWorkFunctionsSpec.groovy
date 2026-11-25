@@ -93,6 +93,28 @@ class KotlinWorkFunctionsSpec extends AbstractWorkFunctionsSpec {
         file("build/work/greet/greet").text == "Hello, world."
     }
 
+    def "updates and rebinds inputs in a Kotlin script"() {
+        given:
+        file("build.gradle.kts") << GREETING_SCRIPT.replace('bind(Greet.In::punctuation).to(formal.map { "." })', '''
+            input(Greet.In::name).update { it.uppercase() }
+            input(Greet.In::name).update(providers.gradleProperty("last")) { name, last -> "$name $last" }
+            input(Greet.In::title).rebind { current -> current.orElse("Mx. ") }
+            input(Greet.In::punctuation).rebind { current -> providers.gradleProperty("punctuation").orElse(current) }
+        ''')
+
+        when:
+        succeeds("greet", "-Pwho=ada", "-Plast=lovelace")
+
+        then:
+        file("build/work/greet/greet").text == "Hello, Mx. ADA lovelace!"
+
+        when:
+        succeeds("greet", "-Pwho=ada", "-Plast=lovelace", "-Pformal=true", "-Ppunctuation=?")
+
+        then:
+        file("build/work/greet/greet").text == "Hello, Dr. ADA lovelace?"
+    }
+
     def "supports a data class with a nullable input and a default value"() {
         given:
         file("build.gradle.kts") << '''
@@ -220,6 +242,7 @@ class KotlinWorkFunctionsSpec extends AbstractWorkFunctionsSpec {
         "a wrong provider with bind"        | 'input(Greet.In::name).bind(providers.provider { 42 })' | "Argument type mismatch"
         "null for a required input"         | 'input(Greet.In::name).bind(null)'                      | "Null cannot be a value of a non-null type"
         "a lambda with input"               | 'input { it.name }.bind("world")'                       | "Cannot infer type for type parameter"
+        "an update to the wrong type"       | 'input(Greet.In::name).update { 42 }'                   | "type mismatch"
     }
 
     def "rejects a reference that is not an input"() {
